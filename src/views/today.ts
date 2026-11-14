@@ -23,7 +23,9 @@ export function todayView(): string {
   const weekLogs = state.logs.filter((l) => l.day >= mon && l.day <= d && state.tracks.some((t) => t.id === l.trackId && !t.archived));
   const weekDays = new Set(weekLogs.map((l) => l.day)).size;
   const weekMin = weekLogs.reduce((a, l) => a + l.minutes, 0);
-  const doneToday = active.filter((t) => todayState(ctxFor(t)) === 'done').length;
+  const states = active.map((t) => todayState(ctxFor(t)));
+  const doneToday = states.filter((s) => s === 'done').length;
+  const needed = states.filter((s) => s !== 'done' && s !== 'rest').length;
 
   if (!state.tracks.filter((t) => !t.archived).length) return emptyView();
 
@@ -31,7 +33,7 @@ export function todayView(): string {
   <section class="hello">
     <div>
       <p class="eyebrow">${WD_LONG[weekday(d)]}, ${fmtDay(d)}</p>
-      <h1>${active.length ? (doneToday === active.length ? 'Hôm nay đã đủ nhịp' : doneToday ? `Đã ghi ${doneToday}/${active.length} việc hôm nay` : 'Hôm nay làm một bước nhỏ nhé') : 'Mọi việc đang tạm dừng'}</h1>
+      <h1>${headline(active.length, doneToday, needed)}</h1>
       <p class="muted">Tuần này: ${weekDays} ngày có học · ${fmtMinutes(weekMin)}</p>
     </div>
     <a class="btn ghost" href="#/new">Thêm việc học</a>
@@ -40,11 +42,23 @@ export function todayView(): string {
   ${paused.length ? `<section><h2 class="sec-title">Đang tạm dừng</h2><div class="cards">${paused.map(pausedCard).join('')}</div></section>` : ''}`;
 }
 
+function headline(total: number, done: number, needed: number): string {
+  if (!total) return 'Mọi việc đang tạm dừng';
+  if (!needed) return done ? 'Hôm nay đã đủ nhịp' : 'Hôm nay là ngày nghỉ';
+  if (done) return `Đã ghi ${done} việc, còn ${needed} việc chờ một bước nhỏ`;
+  return needed === 1 ? 'Hôm nay chỉ cần một bước nhỏ' : `Hôm nay có ${needed} việc, mỗi việc một bước nhỏ là đủ`;
+}
+
 function emptyView(): string {
   return `<section class="empty">
     <h1>Giữ nhịp học, kể cả những ngày bận</h1>
     <p>Mỗi việc học có một đợt 2-4 tuần với sản phẩm cụ thể ở cuối. Mỗi ngày chỉ cần một bước nhỏ là tính. Ngày nghỉ và ngày bận không làm mất nhịp, lỡ một ngày thì hôm sau làm tiếp là được.</p>
-    <div class="row gap"><a class="btn primary" href="#/new">Thêm việc học đầu tiên</a><button class="btn ghost" data-act="load-demo">Xem dữ liệu mẫu</button></div>
+    <div class="row gap wrap"><a class="btn primary" href="#/new">Thêm việc học đầu tiên</a><button class="btn ghost" data-act="load-demo">Xem dữ liệu mẫu</button></div>
+    <div class="how">
+      <div class="card"><b>Bước nhỏ mỗi ngày</b><p>Đặt trước phiên bản nhỏ nhất, ví dụ đọc docs 10 phút. Ngày mệt chỉ cần làm đúng bước đó.</p></div>
+      <div class="card"><b>Đợt 2-4 tuần</b><p>Mỗi đợt kết thúc bằng một thứ làm ra được: repo, video, bản ghi. Tiến độ đo bằng mốc, không chỉ bằng giờ.</p></div>
+      <div class="card"><b>Nhìn lại cuối tuần</b><p>App tự gom việc đã làm, chỗ vướng và bước tiếp theo thành bản tóm tắt để gửi nhận xét.</p></div>
+    </div>
   </section>`;
 }
 

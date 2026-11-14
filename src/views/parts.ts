@@ -52,15 +52,13 @@ export function sprintMeta(s: Sprint, today: Day): string {
 export function heat(ctx: Ctx, weeks: number): string {
   const cols = heatmap(ctx, weeks);
   const lvl = (m: number) => (m >= 60 ? 3 : m >= 25 ? 2 : 1);
-  const months: string[] = [];
-  let lastMonth = '';
-  for (const col of cols) {
-    const m = col[0].day.slice(5, 7);
-    months.push(m !== lastMonth ? `T${Number(m)}` : '');
-    lastMonth = m;
-  }
+  // Label a column only when the 1st of a month falls inside it, so labels never collide.
+  const months = cols.map((col) => {
+    const first = col.find((c) => c.day.endsWith('-01'));
+    return first ? `T${Number(first.day.slice(5, 7))}` : '';
+  });
   return `<div class="heat-wrap"><div class="heat" style="--w:${weeks}">
-    <div class="heat-days"><span>T2</span><span></span><span>T4</span><span></span><span>T6</span><span></span><span>CN</span></div>
+    <div class="heat-days"><span></span><span>T2</span><span></span><span>T4</span><span></span><span>T6</span><span></span><span>CN</span></div>
     ${cols
       .map(
         (col, i) => `<div class="heat-col"><span class="heat-m">${months[i]}</span>${col

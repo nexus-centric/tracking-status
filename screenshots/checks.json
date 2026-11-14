@@ -1,0 +1,28 @@
+{
+  "checks": {
+    "tinyToast-1280": "Đã ghi bước nhỏ hôm nay.",
+    "trackStats-1280": [
+      "67Điểm nhịp",
+      "6/77 ngày qua",
+      "4Tuần đạt liên tiếp",
+      "12 giờ 10 phút23 buổi đã ghi"
+    ],
+    "clipboardHasSummary-1280": true,
+    "importToast": "Đã khôi phục 3 việc học, 44 buổi.",
+    "roundTrip": true,
+    "tinyToast-390": "Đã ghi bước nhỏ hôm nay.",
+    "trackStats-390": [
+      "67Điểm nhịp",
+      "6/77 ngày qua",
+      "4Tuần đạt liên tiếp",
+      "12 giờ 10 phút23 buổi đã ghi"
+    ],
+    "clipboardHasSummary-390": true,
+    "midweekStates": [
+      "Hôm qua lỡ một ngày. Một bước nhỏ hôm nay là đủ để không lỡ hai ngày liền: Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)",
+      "Hôm nay đã ghi 30 phút: SSTables và LSM-tree",
+      "Khi quay lại, bước nhỏ nhất là: Mở project, cắt lại 10 giây đầu của video du lịch"
+    ]
+  },
+  "problems": []
+}
