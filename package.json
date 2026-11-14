@@ -1,0 +1,24 @@
+{
+  "name": "nhip",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Keep a steady learning rhythm: small daily steps, rest-tolerant rhythm metrics, sprint milestones, evidence log and weekly review. Runs fully in the browser.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "tsc -p tsconfig.test.json && node --test tmp/test-build/tests/*.test.js",
+    "screenshots": "node scripts/screenshots.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "playwright-core": "1.65.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}
