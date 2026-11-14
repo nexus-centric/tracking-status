@@ -1,0 +1,12 @@
+{
+  "name": "Nhịp",
+  "short_name": "Nhịp",
+  "description": "Keep a steady learning rhythm with small daily steps, sprint milestones, evidence and weekly review.",
+  "lang": "vi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f3ec",
+  "theme_color": "#f6f3ec",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

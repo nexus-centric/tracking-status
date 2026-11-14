@@ -41,8 +41,9 @@ export function isPaused(track: Track, day: Day): boolean {
   return track.pauses.some((p) => day >= p.from && (p.to === undefined || day <= p.to));
 }
 
-export function currentlyPaused(track: Track): boolean {
-  return track.pauses.some((p) => p.to === undefined);
+/** Paused on the given day: an open pause, or a pause scheduled to end on a later day. */
+export function currentlyPaused(track: Track, day: Day): boolean {
+  return isPaused(track, day);
 }
 
 export function dayStatus(ctx: Ctx, day: Day): DayStatus {
@@ -160,7 +161,7 @@ export type TodayState = 'paused' | 'done' | 'rest' | 'on-track' | 'recover' | '
  * 'restart': two or more misses; the app offers a gentle re-entry instead of a broken streak.
  */
 export function todayState(ctx: Ctx): TodayState {
-  if (currentlyPaused(ctx.track)) return 'paused';
+  if (currentlyPaused(ctx.track, ctx.today)) return 'paused';
   const st = dayStatus(ctx, ctx.today);
   if (st === 'done') return 'done';
   if (st === 'rest' || st === 'busy') return 'rest';

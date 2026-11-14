@@ -80,7 +80,7 @@ export function buildWeekSummary(input: SummaryInput): WeekSummary {
     }
     out.push({
       track,
-      paused: currentlyPaused(track) || pausedAllWeek,
+      paused: currentlyPaused(track, input.today) || pausedAllWeek,
       week,
       minutes,
       full: logs.filter((l) => l.kind === 'full').length,
