@@ -30,7 +30,7 @@ export function weekBar(ctx: Ctx): string {
   const segs = Array.from({ length: Math.max(w.target, w.done) }, (_, i) => `<span class="seg ${i < w.done ? 'on' : ''}"></span>`).join('');
   let note = '';
   if (w.state === 'met') note = w.done > w.target ? `vượt ${w.done - w.target} ngày` : 'đã đạt';
-  else if (w.reachable) note = `còn ${w.target - w.done} ngày nữa`;
+  else if (w.reachable) note = `cần thêm ${w.target - w.done} ngày`;
   else note = 'tuần này hơi hụt, không sao';
   return `<div class="weekbar"><div class="segs" style="--n:${Math.max(w.target, w.done)}">${segs}</div><span class="wb-text">Tuần này <b>${w.done}/${w.target}</b> ngày · ${note}</span></div>`;
 }

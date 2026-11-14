@@ -22,7 +22,15 @@
       "Hôm qua lỡ một ngày. Một bước nhỏ hôm nay là đủ để không lỡ hai ngày liền: Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)",
       "Hôm nay đã ghi 30 phút: SSTables và LSM-tree",
       "Khi quay lại, bước nhỏ nhất là: Mở project, cắt lại 10 giây đầu của video du lịch"
-    ]
+    ],
+    "scheduledReturn": true,
+    "pausedCards": [
+      "Đọc: Designing Data-Intensive Applications",
+      "Dựng video ngắn"
+    ],
+    "resumedActive": true,
+    "newSprint": "Phần II: Distributed Data",
+    "milestonesAfterAdd": 3
   },
   "problems": []
 }

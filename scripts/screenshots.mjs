@@ -24,7 +24,7 @@ const checks = {};
 async function session(width, fixedDay) {
   const ctx = await browser.newContext({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: width > 600 ? 1 : 2, timezoneId: 'Asia/Saigon', locale: 'vi-VN', permissions: ['clipboard-read', 'clipboard-write'], acceptDownloads: true });
   const page = await ctx.newPage();
-  if (fixedDay) await page.clock.setFixedTime(new Date(`${fixedDay}T20:00:00`));
+  if (fixedDay) await page.clock.setFixedTime(new Date(`${fixedDay}T20:00:00+07:00`));
   page.on('console', (m) => { if (m.type() === 'error') problems.push(`[${width}] console: ${m.text()}`); });
   page.on('pageerror', (e) => problems.push(`[${width}] pageerror: ${e.message}`));
   return { ctx, page };
@@ -133,6 +133,42 @@ for (const width of [1280, 390]) {
   await page.waitForSelector('.card.track');
   await shot(page, 'today-midweek-1280');
   checks.midweekStates = await page.locator('.card .state').allTextContents();
+
+  // Schedule a return for the paused track on next Monday.
+  await page.click('.card.paused [data-act="resume-on"]');
+  await page.waitForTimeout(300);
+  checks.scheduledReturn = (await page.textContent('.card.paused')).includes('Đã hẹn quay lại');
+
+  // Pause a track with a next step, then resume it.
+  await go(page, '#/t/demo-reading', '.track-head');
+  await page.click('[data-act="pause"]');
+  await page.fill('dialog [name="next"]', 'Đọc lại mục SSTables 2 trang');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('dialog.modal', { state: 'detached' });
+  await go(page, '', '.card');
+  checks.pausedCards = await page.locator('.card.paused .track-name').allTextContents();
+  await page.locator('.card.paused', { hasText: 'Designing' }).locator('[data-act="resume"]').click();
+  await page.waitForTimeout(300);
+  checks.resumedActive = (await page.locator('.card.track .track-name').allTextContents()).some((t) => t.includes('Designing'));
+
+  // Finish a sprint, then start a new one.
+  await go(page, '#/t/demo-reading', '.sprint');
+  await page.click('[data-act="finish-sprint"]');
+  await page.fill('dialog [name="reflection"]', 'Chương 3 dài hơn dự kiến, đợt sau chia nhỏ hơn.');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('.past');
+  await go(page, '#/t/demo-reading?new-sprint=1', '.sprint-form');
+  await page.fill('[name="title"]', 'Phần II: Distributed Data');
+  await page.fill('[name="deliverable"]', 'Ghi chú chương 5-6');
+  await page.fill('[name="milestones"]', 'Chương 5: Replication\nChương 6: Partitioning');
+  await page.click('.sprint-form button.primary');
+  await page.waitForSelector('.sprint');
+  checks.newSprint = await page.textContent('.sprint h2');
+  await page.fill('.ms-add [name="ms"]', 'Viết tóm tắt');
+  await page.click('.ms-add button');
+  await page.waitForTimeout(300);
+  checks.milestonesAfterAdd = await page.locator('.milestones li').count();
+  await shot(page, 'track-new-sprint-1280');
   await ctx.close();
 }
 
