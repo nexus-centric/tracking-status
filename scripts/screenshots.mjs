@@ -31,7 +31,7 @@ async function session(width, fixedDay) {
 }
 
 const shot = async (page, name) => {
-  await page.evaluate(() => { document.querySelectorAll('.toast').forEach((t) => t.remove()); });
+  await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('.toast').forEach((t) => t.remove()); });
   await page.waitForTimeout(250);
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 };

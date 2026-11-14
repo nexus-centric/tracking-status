@@ -65,7 +65,7 @@ function emptyView(): string {
 function stateLine(t: Track): string {
   const ctx = ctxFor(t);
   const st = todayState(ctx);
-  const todayLogs = state.logs.filter((l) => l.trackId === t.id && l.day === ctx.today);
+  const todayLogs = state.logs.filter((l) => l.trackId === t.id && l.day === ctx.today).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   switch (st) {
     case 'done': {
       const min = todayLogs.reduce((a, l) => a + l.minutes, 0);

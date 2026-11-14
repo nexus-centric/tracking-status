@@ -106,6 +106,10 @@ export function settingsView(): View {
     <div class="row gap wrap"><button class="btn primary" data-act="export">Tải bản sao lưu (JSON)</button><label class="btn file-btn">Khôi phục từ file<input type="file" accept="application/json,.json" data-act="import" hidden></label></div>
     <p class="small muted">Khôi phục sẽ thay toàn bộ dữ liệu hiện tại bằng dữ liệu trong file.</p>
   </section>
+  ${state.tracks.some((t) => t.archived) ? `<section class="card">
+    <h2>Đã lưu trữ</h2>
+    <ul class="past">${state.tracks.filter((t) => t.archived).map((t) => `<li class="row between">${colorDot(t)}<a href="#/t/${t.id}" class="grow">${esc(t.name)}</a><button class="btn small" data-act="archive" data-id="${t.id}">Hiện lại</button></li>`).join('')}</ul>
+  </section>` : ''}
   <section class="card">
     <h2>Ngày bận</h2>
     <label class="field"><span>Số ngày bận được bảo vệ mỗi tháng, cho mỗi việc học</span><div class="row gap"><input type="number" min="0" max="10" value="${state.settings.busyPerMonth}" class="num" data-act="busy-limit"><span class="muted">ngày</span></div></label>
