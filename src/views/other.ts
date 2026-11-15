@@ -111,6 +111,10 @@ export function settingsView(): View {
     <ul class="past">${state.tracks.filter((t) => t.archived).map((t) => `<li class="row between">${colorDot(t)}<a href="#/t/${t.id}" class="grow">${esc(t.name)}</a><button class="btn small" data-act="archive" data-id="${t.id}">Hiện lại</button></li>`).join('')}</ul>
   </section>` : ''}
   <section class="card">
+    <h2>Ghi nhanh</h2>
+    <p class="muted small">Nút Ghi nhanh ở góc màn hình, hoặc phím <b>G</b> (khi không đang gõ trong ô), mở tờ ghi một chạm. App nhớ việc học, loại và thời gian bạn dùng lần trước, nên lần sau chỉ cần bấm lưu.</p>
+  </section>
+  <section class="card">
     <h2>Ngày bận</h2>
     <label class="field"><span>Số ngày bận được bảo vệ mỗi tháng, cho mỗi việc học</span><div class="row gap"><input type="number" min="0" max="10" value="${state.settings.busyPerMonth}" class="num" data-act="busy-limit"><span class="muted">ngày</span></div></label>
     <p class="small muted">Ngày bận không tính là lỡ. Giới hạn nhỏ giúp nó vẫn là ngoại lệ chứ không thành thói quen. Ngày nghỉ cố định trong tuần không bị giới hạn.</p>

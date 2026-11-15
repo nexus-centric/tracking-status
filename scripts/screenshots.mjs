@@ -1,8 +1,12 @@
-// End-to-end smoke test and screenshots at 1280 and 390 px. Requires `npm run build` first.
+// End-to-end smoke test and screenshots at 1280, 768 and 390 px. Requires `npm run build` first.
 // Uses an installed Chrome/Chromium (CHROME_PATH, default /usr/bin/google-chrome) via playwright-core.
+// Still frames use prefers-reduced-motion so captures are not mid-animation.
+// A short tap-to-log clip is recorded with motion enabled.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, unlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
 
 const PORT = 4192;
 const BASE = `http://localhost:${PORT}/`;
@@ -21,23 +25,49 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 const problems = [];
 const checks = {};
 
-async function session(width, fixedDay) {
-  const ctx = await browser.newContext({ viewport: { width, height: width > 600 ? 900 : 844 }, deviceScaleFactor: width > 600 ? 1 : 2, timezoneId: 'Asia/Saigon', locale: 'vi-VN', permissions: ['clipboard-read', 'clipboard-write'], acceptDownloads: true });
+async function session(width, fixedDay, extra = {}) {
+  const height = width >= 1100 ? 900 : width >= 720 ? 1024 : 844;
+  const motion = !!extra.motion;
+  const { motion: _m, ...ctxExtra } = extra;
+  const ctx = await browser.newContext({
+    viewport: { width, height },
+    deviceScaleFactor: width > 600 ? 1 : 2,
+    timezoneId: 'Asia/Saigon',
+    locale: 'vi-VN',
+    permissions: ['clipboard-read', 'clipboard-write'],
+    acceptDownloads: true,
+    ...ctxExtra,
+  });
   const page = await ctx.newPage();
+  if (!motion) await page.emulateMedia({ reducedMotion: 'reduce' });
   if (fixedDay) await page.clock.setFixedTime(new Date(`${fixedDay}T20:00:00+07:00`));
   page.on('console', (m) => { if (m.type() === 'error') problems.push(`[${width}] console: ${m.text()}`); });
   page.on('pageerror', (e) => problems.push(`[${width}] pageerror: ${e.message}`));
   return { ctx, page };
 }
 
-const shot = async (page, name) => {
+const shot = async (page, name, mode = 'page') => {
   await page.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('.toast').forEach((t) => t.remove()); });
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(150);
+  if (mode === 'viewport') {
+    await page.screenshot({ path: `${OUT}/${name}.png` });
+    return;
+  }
+  const vp = page.viewportSize();
+  const height = await page.evaluate(() => {
+    const main = document.querySelector('.main');
+    const bottom = main ? main.getBoundingClientRect().bottom + window.scrollY : 0;
+    return Math.ceil(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, bottom + 8));
+  });
+  const tall = Math.max(vp.height, height);
+  if (tall !== vp.height) await page.setViewportSize({ width: vp.width, height: tall });
+  await page.waitForTimeout(80);
   await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+  if (tall !== vp.height) await page.setViewportSize(vp);
 };
 const go = async (page, hash, sel) => { await page.goto(BASE + hash); await page.waitForSelector(sel); };
 
-for (const width of [1280, 390]) {
+for (const width of [1280, 768, 390]) {
   const { ctx, page } = await session(width);
   await go(page, '', '.empty');
   await shot(page, `empty-${width}`);
@@ -70,6 +100,12 @@ for (const width of [1280, 390]) {
   await page.waitForSelector('dialog.modal', { state: 'detached' });
   await shot(page, `today-after-log-${width}`);
 
+  await page.click('.fab');
+  await page.waitForSelector('dialog.modal .quick-form');
+  await shot(page, `quick-log-${width}`, 'viewport');
+  await page.click('dialog.modal [data-close]');
+  await page.waitForSelector('dialog.modal', { state: 'detached' });
+
   await go(page, '#/t/demo-devops', '.track-head');
   await shot(page, `track-${width}`);
   checks[`trackStats-${width}`] = (await page.locator('.stat').allTextContents()).map((s) => s.replace(/\s+/g, ' ').trim());
@@ -90,7 +126,7 @@ for (const width of [1280, 390]) {
 
   await go(page, '#/evidence', '.week-head');
   await shot(page, `evidence-${width}`);
-  await go(page, '#/settings', '.week-head');
+  await go(page, '#/settings', 'h1');
   await shot(page, `settings-${width}`);
   await go(page, '#/new', '.track-form');
   await page.click('[data-tpl="devops"]');
@@ -98,14 +134,14 @@ for (const width of [1280, 390]) {
 
   if (width === 1280) {
     // Export, then import into a fresh profile and compare.
-    await go(page, '#/settings', '.week-head');
+    await go(page, '#/settings', 'h1');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="export"]')]);
     const path = `${OUT}/../tmp/export.json`;
     mkdirSync('tmp', { recursive: true });
     await dl.saveAs(path);
     const exported = JSON.parse(readFileSync(path, 'utf8'));
     const fresh = await session(1280);
-    await go(fresh.page, '#/settings', '.week-head');
+    await go(fresh.page, '#/settings', 'h1');
     fresh.page.on('dialog', (d) => d.accept());
     await fresh.page.setInputFiles('[data-act="import"]', path);
     await fresh.page.waitForSelector('.toast');
@@ -170,6 +206,54 @@ for (const width of [1280, 390]) {
   checks.milestonesAfterAdd = await page.locator('.milestones li').count();
   await shot(page, 'track-new-sprint-1280');
   await ctx.close();
+}
+
+// Motion clip: mid-week recover state, tap "Xong bước nhỏ", stitched with system ffmpeg.
+{
+  const dir = 'tmp/frames';
+  mkdirSync(dir, { recursive: true });
+  for (const f of readdirSync(dir)) if (f.endsWith('.png')) unlinkSync(join(dir, f));
+  const { ctx, page } = await session(390, '2026-11-18', { motion: true, deviceScaleFactor: 1 });
+  await go(page, '', '.empty');
+  await page.click('[data-act="load-demo"]');
+  await page.waitForSelector('.card.track [data-act="tiny"]');
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.querySelectorAll('.toast').forEach((el) => el.remove()));
+  await page.waitForTimeout(700);
+  let n = 0;
+  const frame = async () => {
+    const path = join(dir, `f${String(n).padStart(3, '0')}.png`);
+    await page.screenshot({ path, animations: 'allow' });
+    n += 1;
+  };
+  for (let i = 0; i < 4; i++) { await frame(); await page.waitForTimeout(80); }
+  const clicked = page.locator('.card.track [data-act="tiny"]').first().click();
+  const endAt = Date.now() + 1800;
+  await clicked;
+  while (Date.now() < endAt) {
+    await frame();
+    await page.waitForTimeout(70);
+  }
+  await ctx.close();
+  const webm = join(OUT, 'tap-to-log.webm');
+  const gif = join(OUT, 'tap-to-log.gif');
+  try {
+    execFileSync('ffmpeg', [
+      '-y', '-framerate', '12', '-i', join(dir, 'f%03d.png'),
+      '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-crf', '36', '-b:v', '0',
+      webm,
+    ], { stdio: 'ignore' });
+    execFileSync('ffmpeg', [
+      '-y', '-framerate', '12', '-i', join(dir, 'f%03d.png'),
+      '-vf', 'fps=12,scale=390:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=64[p];[s1][p]paletteuse=dither=bayer',
+      '-loop', '0', gif,
+    ], { stdio: 'ignore' });
+    checks.tapToLogClip = existsSync(webm) && existsSync(gif);
+    checks.tapToLogFrames = n;
+  } catch (err) {
+    problems.push(`ffmpeg clip: ${(err && err.message) || err}`);
+    checks.tapToLogClip = false;
+  }
 }
 
 await browser.close();

@@ -17,10 +17,21 @@ export const STATUS_LABEL: Record<DayStatus, string> = {
   before: 'trước khi bắt đầu',
 };
 
+export function scoreRing(score: number, label = 'Nhịp'): string {
+  const p = Math.max(0, Math.min(100, Math.round(score)));
+  return `<span class="score-ring" title="Điểm nhịp 0-100: tăng dần khi học đều, ngày nghỉ và ngày bận không làm giảm">
+    <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+      <circle class="ring-bg" cx="18" cy="18" r="15.15" fill="none" stroke-width="2.7"/>
+      <circle class="ring-fg" cx="18" cy="18" r="15.15" fill="none" stroke-width="2.7" pathLength="100" stroke-dasharray="${p} 100" transform="rotate(-90 18 18)"/>
+    </svg>
+    <span class="score-num"><b data-count="${p}">${p}</b><span class="score-lbl">${label}</span></span>
+  </span>`;
+}
+
 export function dots7(ctx: Ctx): string {
   const r = last7(ctx);
   return `<div class="dots7" aria-label="7 ngày qua: ${r.done} ngày có học">${r.days
-    .map((d) => `<div class="dot-col"><span class="dot s-${d.status}" title="${esc(fmtDay(d.day, true))}: ${STATUS_LABEL[d.status]}"></span><span class="dot-lbl">${d.day === ctx.today ? 'Nay' : weekdayShort(weekday(d.day))}</span></div>`)
+    .map((d) => `<div class="dot-col"><span class="dot s-${d.status}" ${d.day === ctx.today ? 'data-today="1"' : ''} title="${esc(fmtDay(d.day, true))}: ${STATUS_LABEL[d.status]}"></span><span class="dot-lbl">${d.day === ctx.today ? 'Nay' : weekdayShort(weekday(d.day))}</span></div>`)
     .join('')}</div>`;
 }
 

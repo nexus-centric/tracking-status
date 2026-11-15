@@ -4,7 +4,7 @@ Keep a steady learning rhythm, even on busy days. Nhip ("Nhịp", Vietnamese for
 browser app for tracking self-directed learning such as a DevOps lab or video editing. The UI is in Vietnamese.
 
 - Learning tracks with 2-4 week sprints, each ending in a concrete deliverable and a few milestones.
-- A smallest step that still counts: one tap logs it, so a 10 minute day keeps the rhythm.
+- A smallest step that still counts: one tap on Today logs it, and a Ghi nhanh button (or the G key) logs from any screen with one more tap. Duration and type chips remember the last values, so most days need no typing.
 - Rhythm metrics that tolerate real life: days done in the last 7, a weekly target, weekly streaks,
   fixed rest days, a small monthly allowance of busy days, and a momentum score that a single missed day
   barely moves.
@@ -30,8 +30,8 @@ npm run build      # type check and production build into dist/
 npm run preview    # serve dist/
 ```
 
-Screenshots and an end-to-end smoke test (needs a local Chrome or Chromium; set `CHROME_PATH` if it is not at
-`/usr/bin/google-chrome`):
+Screenshots (390, 768 and 1280 px) and an end-to-end smoke test (needs a local Chrome or Chromium; set
+`CHROME_PATH` if it is not at `/usr/bin/google-chrome`). A short `tap-to-log` clip is written alongside the PNGs:
 
 ```bash
 npm run build && npm run screenshots

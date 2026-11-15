@@ -1,10 +1,44 @@
 // Dialogs and forms: log a session, pause a track, finish a sprint.
 import { addDays, fmtDay, today } from '../core/dates.js';
-import { currentlyPaused } from '../core/rhythm.js';
+import { defaultMinutes, durationChips, loadPrefs, mergePrefs, savePrefs } from '../core/prefs.js';
+import { currentlyPaused, momentum, todayState } from '../core/rhythm.js';
 import { activeSprint } from '../core/sprint.js';
 import type { Evidence, LogEntry, LogKind, Track } from '../core/types.js';
-import { getTrack, newId, saveLog, saveSprint, saveTrack, state } from '../state.js';
+import { clientCenter, queueCelebration } from '../motion.js';
+import { ctxFor, getTrack, newId, saveLog, saveSprint, saveTrack, state } from '../state.js';
 import { $, esc, imageToDataUrl, isHttpUrl, openModal, toast } from '../ui.js';
+import { colorDot } from './parts.js';
+
+
+function prefsStorage(): { getItem(key: string): string | null; setItem(key: string, value: string): void } | null {
+  try { return localStorage; } catch { return null; }
+}
+
+function remember(patch: { trackId?: string; kind?: LogKind; minutes?: number }): void {
+  const storage = prefsStorage();
+  savePrefs(mergePrefs(loadPrefs(storage), patch), storage);
+}
+
+export function loggableTracks(includeId?: string): Track[] {
+  const d = today();
+  return state.tracks.filter((t) => !t.archived && (!currentlyPaused(t, d) || t.id === includeId));
+}
+
+function minuteChips(selected: number): string {
+  return durationChips(selected)
+    .map((m) => `<button type="button" class="chip${m === selected ? ' on' : ''}" data-min="${m}">${m === 0 ? 'Không' : m}</button>`)
+    .join('');
+}
+
+function syncMinuteChips(root: ParentNode, value: number): void {
+  root.querySelectorAll<HTMLElement>('[data-min]').forEach((el) => {
+    el.classList.toggle('on', Number(el.dataset.min) === value);
+  });
+}
+
+function celebrate(track: Track, origin?: { x: number; y: number }): void {
+  queueCelebration({ trackId: track.id, fromScore: momentum(ctxFor(track)), origin, color: track.color });
+}
 
 function evidenceItem(e: Evidence, i: number): string {
   const body =
@@ -16,14 +50,16 @@ function evidenceItem(e: Evidence, i: number): string {
   return `<li class="ev-item">${body}<button type="button" class="link-btn" data-rm="${i}" aria-label="Bỏ bằng chứng">Bỏ</button></li>`;
 }
 
-export function openLogDialog(trackId: string, opts: { logId?: string; kind?: LogKind; day?: string } = {}): void {
+export function openLogDialog(trackId: string, opts: { logId?: string; kind?: LogKind; day?: string; minutes?: number } = {}): void {
   const existing = opts.logId ? state.logs.find((l) => l.id === opts.logId) : undefined;
   const d = today();
   let track = getTrack(existing?.trackId ?? trackId);
   if (!track) return;
   const evidence: Evidence[] = existing ? existing.evidence.map((e) => ({ ...e })) : [];
-  const kind: LogKind = existing?.kind ?? opts.kind ?? 'full';
-  const choices = state.tracks.filter((t) => !t.archived && (!currentlyPaused(t, d) || t.id === track!.id));
+  const prefs = loadPrefs(prefsStorage());
+  const kind: LogKind = existing?.kind ?? opts.kind ?? prefs.kind;
+  const startMinutes = existing ? existing.minutes : (opts.minutes ?? defaultMinutes(prefs, kind));
+  const choices = loggableTracks(track.id);
 
   const msOptions = (t: Track) => {
     const s = activeSprint(state.sprints, t.id);
@@ -46,8 +82,8 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       <label><input type="radio" name="kind" value="full" ${kind === 'full' ? 'checked' : ''}><span>Phiên đầy đủ</span></label>
     </fieldset>
     <div class="field"><span>Thời gian (phút, không bắt buộc)</span>
-      <div class="row gap wrap"><input type="number" name="minutes" min="0" max="1440" inputmode="numeric" value="${existing ? existing.minutes || '' : kind === 'tiny' ? 10 : 30}" class="num">
-      ${[10, 25, 45, 60, 90].map((m) => `<button type="button" class="chip" data-min="${m}">${m}</button>`).join('')}</div>
+      <div class="row gap wrap"><input type="number" name="minutes" min="0" max="1440" inputmode="numeric" value="${startMinutes || ''}" class="num">
+      ${minuteChips(startMinutes)}</div>
     </div>
     <label class="field"><span>Đã làm gì</span><textarea name="note" rows="2" placeholder="Ví dụ: cài Argo CD, đổi mật khẩu admin">${esc(existing?.note ?? '')}</textarea></label>
     <div class="ms-slot">${msOptions(track)}</div>
@@ -77,7 +113,7 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
   form.addEventListener('click', (e) => {
     const el = e.target as HTMLElement;
     const min = el.closest<HTMLElement>('[data-min]')?.dataset.min;
-    if (min) field('minutes').value = min;
+    if (min !== undefined) { field('minutes').value = min === '0' ? '' : min; syncMinuteChips(form, Number(min)); }
     const rm = el.closest<HTMLElement>('[data-rm]')?.dataset.rm;
     if (rm !== undefined) { evidence.splice(Number(rm), 1); renderEv(); }
     const ev = el.closest<HTMLElement>('[data-ev]')?.dataset.ev;
@@ -108,7 +144,13 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       form.querySelector('.ms-slot')!.innerHTML = msOptions(track);
       field('nextStep').value = track.nextStep;
     }
-    if (el.name === 'kind' && !existing) field('minutes').value = el.value === 'tiny' ? '10' : '30';
+    if (el.name === 'kind' && !existing) {
+      const k = el.value as LogKind;
+      const mins = defaultMinutes(loadPrefs(prefsStorage()), k);
+      field('minutes').value = mins ? String(mins) : '';
+      syncMinuteChips(form, mins);
+    }
+    if (el.name === 'minutes') syncMinuteChips(form, Number(el.value) || 0);
   });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -138,6 +180,8 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       demo: existing?.demo,
     };
+    if (!existing) celebrate(track!, clientCenter(form.querySelector('button[type="submit"]') ?? form));
+    remember({ trackId: track!.id, kind: k, minutes: entry.minutes });
     await saveLog(entry);
     if (sprintId && msId) {
       const s = state.sprints.find((x) => x.id === sprintId);
@@ -147,6 +191,100 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
     if (next !== track!.nextStep) await saveTrack({ ...track!, nextStep: next });
     dlg.close();
     toast(existing ? 'Đã cập nhật buổi học.' : `Đã ghi ${k === 'tiny' ? 'bước nhỏ' : 'buổi học'} ${day === d ? 'hôm nay' : fmtDay(day)}.`);
+  });
+}
+
+
+export function openQuickLog(preferredId?: string): void {
+  const d = today();
+  const choices = loggableTracks();
+  if (!choices.length) {
+    toast('Chưa có việc học nào để ghi. Thêm một việc, hoặc mở lại việc đang tạm dừng.');
+    return;
+  }
+  const prefs = loadPrefs(prefsStorage());
+  const needed = (t: Track) => {
+    const st = todayState(ctxFor(t));
+    return st !== 'done' && st !== 'rest' && st !== 'paused';
+  };
+  let track = choices.find((t) => t.id === preferredId) ?? choices.find((t) => t.id === prefs.trackId) ?? choices.find(needed) ?? choices[0]!;
+  let kind: LogKind = prefs.kind;
+  let minutes = defaultMinutes(prefs, kind);
+
+  const labelFor = () => (kind === 'tiny' ? 'Xong bước nhỏ' : 'Ghi phiên');
+
+  const dlg = openModal(`<form class="quick-form" method="dialog" novalidate>
+    <header class="modal-head"><h2>Ghi nhanh</h2><button type="button" class="link-btn" data-close>Đóng</button></header>
+    <div class="field"><span>Việc học</span>
+      <div class="row gap wrap track-picks">${choices.map((t) => `<button type="button" class="chip${t.id === track.id ? ' on' : ''}" data-pick="${t.id}">${colorDot(t)}${esc(t.name)}</button>`).join('')}</div>
+    </div>
+    <fieldset class="seg-field"><legend>Loại</legend>
+      <label><input type="radio" name="kind" value="tiny" ${kind === 'tiny' ? 'checked' : ''}><span>Bước nhỏ</span></label>
+      <label><input type="radio" name="kind" value="full" ${kind === 'full' ? 'checked' : ''}><span>Phiên đầy đủ</span></label>
+    </fieldset>
+    <div class="field"><span>Thời gian (phút, không bắt buộc)</span>
+      <div class="row gap wrap min-picks">${minuteChips(minutes)}</div>
+    </div>
+    <label class="field"><span>Đã làm gì (không bắt buộc)</span><input type="text" name="note" placeholder="Để trống cũng được"></label>
+    <p class="small muted quick-hint">Lần sau app nhớ lựa chọn này. Phím G mở lại tờ ghi nhanh.</p>
+    <footer class="modal-foot">
+      <button type="button" class="btn ghost" data-full>Thêm bằng chứng</button>
+      <button type="submit" class="btn primary save-quick">${labelFor()}</button>
+    </footer>
+  </form>`, 'quick');
+
+  const form = dlg.querySelector('form')!;
+  const saveBtn = () => form.querySelector<HTMLElement>('.save-quick')!;
+  const picks = () => form.querySelector('.min-picks')!;
+
+  const refreshMinutes = () => {
+    picks().innerHTML = minuteChips(minutes);
+  };
+
+  form.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-pick], [data-min], [data-full]');
+    if (!el) return;
+    if (el.dataset.pick) {
+      track = getTrack(el.dataset.pick) ?? track;
+      form.querySelectorAll<HTMLElement>('[data-pick]').forEach((b) => b.classList.toggle('on', b.dataset.pick === track.id));
+    }
+    if (el.dataset.min !== undefined) {
+      minutes = Number(el.dataset.min) || 0;
+      syncMinuteChips(form, minutes);
+    }
+    if (el.dataset.full !== undefined) {
+      dlg.close();
+      openLogDialog(track.id, { kind, minutes, day: d });
+    }
+  });
+  form.addEventListener('change', (e) => {
+    const el = e.target as HTMLInputElement;
+    if (el.name === 'kind') {
+      kind = el.value as LogKind;
+      minutes = defaultMinutes(loadPrefs(prefsStorage()), kind);
+      refreshMinutes();
+      saveBtn().textContent = labelFor();
+    }
+  });
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const note = (form.elements.namedItem('note') as HTMLInputElement).value.trim();
+    celebrate(track, clientCenter(saveBtn()));
+    remember({ trackId: track.id, kind, minutes });
+    const entry: LogEntry = {
+      id: newId(),
+      trackId: track.id,
+      day: d,
+      kind,
+      minutes,
+      note: note || (kind === 'tiny' ? track.tinyAction : ''),
+      blocker: '',
+      evidence: [],
+      createdAt: new Date().toISOString(),
+    };
+    await saveLog(entry);
+    dlg.close();
+    toast(`Đã ghi ${kind === 'tiny' ? 'bước nhỏ' : 'buổi học'} hôm nay.`);
   });
 }
 

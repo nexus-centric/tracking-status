@@ -6,7 +6,7 @@ import { activeSprint, defaultEnd, lengthWarning, sprintProgress } from '../core
 import type { Milestone, Sprint, Track } from '../core/types.js';
 import { ctxFor, getTrack, newId, saveSprint, saveTrack, state } from '../state.js';
 import { esc, toast } from '../ui.js';
-import { colorDot, dots7, heat, restDaysText, sprintBar, sprintMeta, weekBar } from './parts.js';
+import { colorDot, dots7, heat, restDaysText, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
 import { demoBanner } from './today.js';
 
 export interface View { title: string; html: string; mount?: (root: HTMLElement) => void }
@@ -39,7 +39,7 @@ export function trackView(id: string, params: URLSearchParams): View {
   const total = logs.reduce((a, l) => a + l.minutes, 0);
   const l7 = last7(ctx);
   const html = `${demoBanner()}
-  <section class="track-head" style="--c:${esc(t.color)}">
+  <section class="track-head" data-track="${t.id}" style="--c:${esc(t.color)}">
     <div>
       <a href="#/" class="back">Hôm nay</a>
       <h1>${colorDot(t)}${esc(t.name)}</h1>
@@ -51,9 +51,9 @@ export function trackView(id: string, params: URLSearchParams): View {
     </div>
   </section>
   <section class="stats">
-    <div class="stat"><b>${momentum(ctx)}</b><span>Điểm nhịp</span></div>
+    <div class="stat with-ring" style="--c:${esc(t.color)}">${scoreRing(momentum(ctx))}<div class="stat-copy"><span>Điểm nhịp</span></div></div>
     <div class="stat"><b>${l7.done}/7</b><span>7 ngày qua${l7.off ? ` (${l7.off} nghỉ)` : ''}</span></div>
-    <div class="stat"><b>${weekStreak(ctx)}</b><span>Tuần đạt liên tiếp</span></div>
+    <div class="stat"><b data-count="${weekStreak(ctx)}">${weekStreak(ctx)}</b><span>Tuần đạt liên tiếp</span></div>
     <div class="stat"><b>${fmtMinutes(total)}</b><span>${logs.length} buổi đã ghi</span></div>
   </section>
   <section class="card">

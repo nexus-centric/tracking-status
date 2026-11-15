@@ -4,13 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Giữ nhịp học mỗi ngày bằng bước nhỏ, đợt học 2-4 tuần có sản phẩm cụ thể, nhật ký bằng chứng và nhìn lại tuần. Chạy hoàn toàn trên trình duyệt." />
-    <meta name="theme-color" content="#f6f3ec" />
+    <meta name="theme-color" content="#f3eee4" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="manifest.webmanifest" />
     <title>Nhịp</title>
+    <style>
+      html, body { margin: 0; min-height: 100%; background: #f3eee4; color: #1a221f; font-family: ui-rounded, system-ui, sans-serif; }
+      .skel-boot { max-width: 1080px; margin: 0 auto; padding: 2rem 1.15rem; }
+      .skel-boot .s { background: #efe8dc; border-radius: 12px; }
+      .skel-boot .t { width: min(16rem, 70%); height: 1.8rem; margin-bottom: 1.5rem; }
+      .skel-boot .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 1rem; }
+      .skel-boot .c { height: 14rem; border-radius: 22px; background: #fffaf3; border: 1px solid #e6dfd2; }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="skel-boot" aria-hidden="true"><div class="s t"></div><div class="row"><div class="c"></div><div class="c"></div></div></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

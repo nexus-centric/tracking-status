@@ -6,7 +6,8 @@ import { activeSprint, sprintProgress } from '../core/sprint.js';
 import type { Track } from '../core/types.js';
 import { ctxFor, hasDemo, state } from '../state.js';
 import { esc } from '../ui.js';
-import { colorDot, dots7, sprintBar, sprintMeta, weekBar } from './parts.js';
+import { colorDot, dots7, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
+import { emptyMark, icoCheck } from '../icons.js';
 
 const WD_LONG = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 
@@ -29,6 +30,11 @@ export function todayView(): string {
 
   if (!state.tracks.filter((t) => !t.archived).length) return emptyView();
 
+  const rings = active.map((t) => {
+    const ctx = ctxFor(t);
+    return `<a class="hello-ring" href="#/t/${t.id}" style="--c:${esc(t.color)}" title="${esc(t.name)}">${scoreRing(momentum(ctx))}<span class="hr-name">${esc(shortName(t.name))}</span></a>`;
+  }).join('');
+
   return `${demoBanner()}
   <section class="hello">
     <div>
@@ -36,10 +42,18 @@ export function todayView(): string {
       <h1>${headline(active.length, doneToday, needed)}</h1>
       <p class="muted">Tuần này: ${weekDays} ngày có học · ${fmtMinutes(weekMin)}</p>
     </div>
-    <a class="btn ghost" href="#/new">Thêm việc học</a>
+    <div class="hello-side">
+      ${active.length ? `<div class="hello-overview">${rings}</div>` : ''}
+      <a class="btn ghost" href="#/new">Thêm việc học</a>
+    </div>
   </section>
   <section class="cards">${active.map(card).join('')}</section>
-  ${paused.length ? `<section><h2 class="sec-title">Đang tạm dừng</h2><div class="cards">${paused.map(pausedCard).join('')}</div></section>` : ''}`;
+  ${paused.length ? `<section><h2 class="sec-title">Đang tạm dừng</h2><div class="cards">${paused.map((t, i) => pausedCard(t, i + active.length)).join('')}</div></section>` : ''}`;
+}
+
+function shortName(name: string): string {
+  const head = name.split(':')[0].trim();
+  return head.length <= 16 ? head : `${head.slice(0, 15)}…`;
 }
 
 function headline(total: number, done: number, needed: number): string {
@@ -51,13 +65,14 @@ function headline(total: number, done: number, needed: number): string {
 
 function emptyView(): string {
   return `<section class="empty">
+    ${emptyMark}
     <h1>Giữ nhịp học, kể cả những ngày bận</h1>
     <p>Mỗi việc học có một đợt 2-4 tuần với sản phẩm cụ thể ở cuối. Mỗi ngày chỉ cần một bước nhỏ là tính. Ngày nghỉ và ngày bận không làm mất nhịp, lỡ một ngày thì hôm sau làm tiếp là được.</p>
     <div class="row gap wrap"><a class="btn primary" href="#/new">Thêm việc học đầu tiên</a><button class="btn ghost" data-act="load-demo">Xem dữ liệu mẫu</button></div>
     <div class="how">
-      <div class="card"><b>Bước nhỏ mỗi ngày</b><p>Đặt trước phiên bản nhỏ nhất, ví dụ đọc docs 10 phút. Ngày mệt chỉ cần làm đúng bước đó.</p></div>
-      <div class="card"><b>Đợt 2-4 tuần</b><p>Mỗi đợt kết thúc bằng một thứ làm ra được: repo, video, bản ghi. Tiến độ đo bằng mốc, không chỉ bằng giờ.</p></div>
-      <div class="card"><b>Nhìn lại cuối tuần</b><p>App tự gom việc đã làm, chỗ vướng và bước tiếp theo thành bản tóm tắt để gửi nhận xét.</p></div>
+      <div class="card" style="--i:0"><b>Bước nhỏ mỗi ngày</b><p>Đặt trước phiên bản nhỏ nhất, ví dụ đọc docs 10 phút. Ngày mệt chỉ cần làm đúng bước đó.</p></div>
+      <div class="card" style="--i:1"><b>Đợt 2-4 tuần</b><p>Mỗi đợt kết thúc bằng một thứ làm ra được: repo, video, bản ghi. Tiến độ đo bằng mốc, không chỉ bằng giờ.</p></div>
+      <div class="card" style="--i:2"><b>Nhìn lại cuối tuần</b><p>App tự gom việc đã làm, chỗ vướng và bước tiếp theo thành bản tóm tắt để gửi nhận xét.</p></div>
     </div>
   </section>`;
 }
@@ -86,7 +101,7 @@ function stateLine(t: Track): string {
   }
 }
 
-function card(t: Track): string {
+function card(t: Track, index = 0): string {
   const ctx = ctxFor(t);
   const st = todayState(ctx);
   const score = momentum(ctx);
@@ -97,17 +112,17 @@ function card(t: Track): string {
   const primary =
     st === 'done'
       ? `<button class="btn" data-act="log" data-id="${t.id}">Ghi thêm</button>`
-      : `<button class="btn primary" data-act="tiny" data-id="${t.id}">Xong bước nhỏ</button><button class="btn" data-act="log" data-id="${t.id}">Ghi phiên học</button>`;
+      : `<button class="btn primary" data-act="tiny" data-id="${t.id}">${icoCheck} Xong bước nhỏ</button><button class="btn" data-act="log" data-id="${t.id}">Ghi phiên học</button>`;
   const busyBtn =
     st === 'done' || (st === 'rest' && !busyMarked)
       ? ''
       : busyMarked
         ? `<button class="btn ghost small" data-act="unbusy" data-id="${t.id}">Bỏ đánh dấu bận</button>`
         : `<button class="btn ghost small" data-act="busy" data-id="${t.id}" ${busyLeft <= 0 ? 'disabled' : ''} title="Không tính là lỡ. Còn ${Math.max(0, busyLeft)} lần trong tháng.">Hôm nay bận (còn ${Math.max(0, busyLeft)})</button>`;
-  return `<article class="card track" style="--c:${esc(t.color)}">
+  return `<article class="card track" data-track="${t.id}" style="--c:${esc(t.color)};--i:${index}">
     <header class="card-head">
       <a class="track-name" href="#/t/${t.id}">${colorDot(t)}${esc(t.name)}</a>
-      <span class="score" title="Điểm nhịp 0-100: tăng dần khi học đều, ngày nghỉ và ngày bận không làm giảm">Nhịp <b>${score}</b></span>
+      ${scoreRing(score)}
     </header>
     ${stateLine(t)}
     <div class="actions">${primary}${busyBtn}</div>
@@ -125,12 +140,12 @@ function card(t: Track): string {
   </article>`;
 }
 
-function pausedCard(t: Track): string {
+function pausedCard(t: Track, index = 0): string {
   const d = today();
   const r = reentry(t, state.sprints, state.logs, d);
   const pause = t.pauses.find((p) => p.from <= d && (p.to === undefined || p.to >= d))!;
   const away = diffDays(d, pause.from);
-  return `<article class="card paused" style="--c:${esc(t.color)}">
+  return `<article class="card paused" data-track="${t.id}" style="--c:${esc(t.color)};--i:${index}">
     <header class="card-head"><a class="track-name" href="#/t/${t.id}">${colorDot(t)}${esc(t.name)}</a><span class="muted small">tạm dừng ${away ? `${away} ngày` : 'từ hôm nay'}</span></header>
     ${pause.note ? `<p class="small muted">Lý do: ${esc(pause.note)}</p>` : ''}
     ${r.lastNote ? `<p class="small">Lần cuối (${fmtDay(r.lastDay!)}): ${esc(r.lastNote)}</p>` : ''}

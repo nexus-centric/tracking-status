@@ -1,6 +1,6 @@
 # Nhip: design notes
 
-Status: v0.1, local only. Research accessed on 2026-11-15 (Asia/Saigon). Every source below was opened or
+Status: v0.2, local only. Research accessed on 2026-11-15 (Asia/Saigon). Every source below was opened or
 searched on that date; where only a secondary source was read, it is marked as such.
 
 ## 1. Problem
@@ -230,4 +230,27 @@ current data after confirmation. Images are resized to at most 1280 px and store
 - The research above mostly studies simple habits, consumer apps or workplaces. Whether these rules improve
   long-term learning of complex skills for this user is untested; the app should be judged after a few sprints.
 - No dark theme yet. Form fields have labels and controls have visible focus outlines, but no screen reader or
-  automated accessibility audit has been run.
+  automated accessibility audit has been run. Motion is disabled when `prefers-reduced-motion: reduce` is set.
+
+## 10. Visual language and logging speed
+
+The UI is a warm paper surface (cream background, rounded cards, soft shadows) with a deep teal accent. The
+intent is a notebook that feels easy to open, not a dashboard of metrics. Motion is used for orientation, not
+score-chasing: page enters and staggered card rises, a short burst and ring fill when a tiny step is logged,
+animated week segments and momentum rings, number count-up after a log, hover/press states, and a skeleton
+while IndexedDB loads. Every animation is skipped when the user prefers reduced motion.
+
+Layout:
+
+- Narrow screens (around 390px): a compact top brand, a bottom tab bar with icons, a round "Ghi nhanh" button
+  above the bar, and safe-area insets for notched phones.
+- Mid widths (around 768px): a top tab bar, two-column track cards when space allows, and a labelled quick-log
+  button.
+- Wide screens (1100px and up): a left side nav and a multi-column dashboard, including a row of momentum rings
+  in the Today header.
+
+Because the user logs by hand, one-tap "Xong bước nhỏ" stays on the Today card, and a floating "Ghi nhanh"
+button (keyboard shortcut G, with L as an alias) is available on every non-editor page. The sheet remembers
+the last track, kind and duration in `localStorage` (`nhip:log-prefs`); these prefs are not part of the JSON
+export, so backups stay compatible. One-tap "Xong bước nhỏ" is unchanged: it still stores 0 minutes and the
+track's tiny-action text.

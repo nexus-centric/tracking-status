@@ -2,7 +2,7 @@
   "checks": {
     "tinyToast-1280": "Đã ghi bước nhỏ hôm nay.",
     "trackStats-1280": [
-      "67Điểm nhịp",
+      "67Nhịp Điểm nhịp",
       "6/77 ngày qua",
       "4Tuần đạt liên tiếp",
       "12 giờ 10 phút23 buổi đã ghi"
@@ -10,9 +10,17 @@
     "clipboardHasSummary-1280": true,
     "importToast": "Đã khôi phục 3 việc học, 44 buổi.",
     "roundTrip": true,
+    "tinyToast-768": "Đã ghi bước nhỏ hôm nay.",
+    "trackStats-768": [
+      "67Nhịp Điểm nhịp",
+      "6/77 ngày qua",
+      "4Tuần đạt liên tiếp",
+      "12 giờ 10 phút23 buổi đã ghi"
+    ],
+    "clipboardHasSummary-768": true,
     "tinyToast-390": "Đã ghi bước nhỏ hôm nay.",
     "trackStats-390": [
-      "67Điểm nhịp",
+      "67Nhịp Điểm nhịp",
       "6/77 ngày qua",
       "4Tuần đạt liên tiếp",
       "12 giờ 10 phút23 buổi đã ghi"
@@ -30,7 +38,9 @@
     ],
     "resumedActive": true,
     "newSprint": "Phần II: Distributed Data",
-    "milestonesAfterAdd": 3
+    "milestonesAfterAdd": 3,
+    "tapToLogClip": true,
+    "tapToLogFrames": 19
   },
   "problems": []
 }
