@@ -1,6 +1,6 @@
-# Nhip: design notes
+# Tiến độ học: design notes
 
-Status: v0.2, local only. Research accessed on 2026-11-15 (Asia/Saigon). Every source below was opened or
+Status: v0.3, local only. Research accessed on 2026-11-15 (Asia/Saigon). Every source below was opened or
 searched on that date; where only a secondary source was read, it is marked as such.
 
 ## 1. Problem
@@ -15,15 +15,16 @@ result tends to stall.
 
 ## 2. Name
 
-The app is `nhip`, shown in the UI as "Nhịp" (Vietnamese for beat, rhythm, pace). The repository is
-`nexus-centric/tracking-status`; internal identifiers (IndexedDB name, backup `app` field, cache and
-`localStorage` keys) keep `nhip` so existing data and backups stay compatible.
+The app is shown as "Tiến độ học" ("learning progress"), with a small mono subtitle `tracking-status`, the
+repository name (`nexus-centric/tracking-status`). Earlier versions used "Nhịp"; on its own that word read as
+clipped and slogan-like in the UI, so it was dropped from all copy.
 
-- It is the word the owner used for the core need: keep the pace ("giữ được nhịp độ").
-- One short word, ASCII-only, readable by Vietnamese speakers without explanation.
-- Follows the naming rule that app names must not use a `-lab` or `Lab` suffix.
-- Alternatives considered: `giu-nhip` (clearer but longer), `steady` and `cadence` (English, generic, more
-  name collisions).
+- Plain, natural Vietnamese that says what the app tracks; no explanation needed.
+- Matches the repository name, so the app, the repo and the PWA install name agree.
+- Internal identifiers keep `nhip` (IndexedDB database, backup `app` field, `localStorage` keys) so existing data
+  and backups stay compatible. The service worker cache was renamed to `tracking-status-v2`.
+- Copy rules applied in the rewrite: full sentences addressed to "bạn", no slogans or gamified hype, the same
+  term for the same thing everywhere ("buổi học", "bước nhỏ", "đợt học", "độ đều đặn", "thành quả").
 
 ## 3. Research summary
 
@@ -217,42 +218,102 @@ Code: `src/core/reentry.ts`. For a paused or stalled track the app shows the las
 first-week target (half the usual, rounded up), and a choice between returning today and returning next Monday.
 The log dialog always asks for the next small step so it is ready after a break (design choice, untested).
 
-## 8. Storage and privacy
+## 8. Storage, backup and privacy
 
 IndexedDB database `nhip` with stores `tracks`, `sprints`, `logs`, `marks`, `reviews`, `settings`. Data never
-leaves the browser. Export writes one JSON file (`app: "nhip", version: 1`); import validates and normalizes each
-record, drops invalid or orphaned ones (unsafe link schemes, non-image data URLs, unknown tracks), and replaces the
-current data after confirmation. Images are resized to at most 1280 px and stored as JPEG data URLs inside the log.
+leaves the browser and is not hardcoded; demo data is generated on demand and flagged.
+
+Backup file (`src/core/bundle.ts`): `{ app: "nhip", version: 1, exportedAt, tracks, sprints, logs, marks,
+reviews, settings }`, named `tracking-status-backup-YYYY-MM-DD.json`.
+
+- Versioned: a missing version is read as 1; a non-integer or newer version is rejected with a message asking
+  to update the app first.
+- Validated: every record is normalized; invalid or orphaned records (unsafe link schemes, non-image data URLs,
+  unknown tracks) are dropped and counted.
+- Preview: the import dialog shows per-type counts in the file, in the browser, and what a merge would add.
+- Merge (default) adds records whose id is new and never deletes; a rest or busy mark is skipped when that track
+  already has one on that day; for weekly reviews the newer `updatedAt` wins; current settings are kept.
+- Replace swaps everything and requires an explicit confirmation checkbox.
+- Reminder: when the last export is 14 or more days old (or never) and there are at least 5 non-demo logs, Today
+  shows a dismissible banner; Settings always shows "Lần sao lưu gần nhất cách đây N ngày". The last export time
+  is stored in `localStorage` (`nhip:last-backup`), not in the backup itself.
+- Settings shows whether the browser granted persistent storage and offers `navigator.storage.persist()`.
+  MDN (StorageManager.persist, accessed 2026-11-15): the browser "may or may not honor the request"; persistent
+  storage is not cleared except by explicit user action, best-effort storage may be cleared under pressure.
+
+Cloud sync (S3 or similar) was considered and deliberately left out: it would need authentication and a backend,
+and no long-lived credentials may live in the browser. A JSON file kept in a personal cloud drive covers the
+owner's need for now.
+
+Images are resized to at most 1280 px and stored as JPEG data URLs inside the log, so they are part of the backup.
 
 ## 9. Known limitations
 
-- No reminders or notifications: the app cannot nudge at the planned time.
 - No sync between devices; moving data means export and import.
+- Timer notifications from a hidden tab can arrive late: MDN (setTimeout, accessed 2026-11-15) documents
+  throttling of timers in inactive tabs (at least 1 s in Chrome, longer under intensive throttling). The elapsed
+  time itself stays correct because it is recomputed from timestamps.
+- Notifications use `ServiceWorkerRegistration.showNotification` when a service worker is active (required on
+  Android Chrome, where the `Notification` constructor throws), else the constructor; the PWA service worker is
+  only registered in production builds.
 - Images live inside IndexedDB and the export file; many large images make the backup big.
 - The research above mostly studies simple habits, consumer apps or workplaces. Whether these rules improve
-  long-term learning of complex skills for this user is untested; the app should be judged after a few sprints.
-- No dark theme yet. Form fields have labels and controls have visible focus outlines, but no screen reader or
-  automated accessibility audit has been run. Motion is disabled when `prefers-reduced-motion: reduce` is set.
+  long-term learning of complex skills for this user is untested.
+- No dark theme yet. No screen reader or automated accessibility audit has been run.
 
-## 10. Visual language and logging speed
+## 10. Visual language
 
-The UI is a warm paper surface (cream background, rounded cards, soft shadows) with a deep teal accent. The
-intent is a notebook that feels easy to open, not a dashboard of metrics. Motion is used for orientation, not
-score-chasing: page enters and staggered card rises, a short burst and ring fill when a tiny step is logged,
-animated week segments and momentum rings, number count-up after a log, hover/press states, and a skeleton
-while IndexedDB loads. Every animation is skipped when the user prefers reduced motion.
+Direction: "cool console", chosen to look clearly different from the owner's other app (Omni Feyn) and to borrow
+the clarity of AI developer-tool sites. References viewed on 2026-11-15 (Asia/Saigon):
 
-Layout:
+- harness.io: light grey-blue canvas, mono uppercase letter-spaced eyebrows, dashed connector lines with nodes,
+  black pill buttons. A third-party teardown (pixlpin.com/d/harness, secondary source) describes "3D pipeline
+  conduits, scroll-driven animations".
+- deepseek.com/en/harness: atmospheric blue gradient, mono eyebrow label, clean sans headings.
+- magicui.design "Animated Beam": a gradient beam travelling along a connector path between nodes.
 
-- Narrow screens (around 390px): a compact top brand, a bottom tab bar with icons, a round "Ghi nhanh" button
-  above the bar, and safe-area insets for notched phones.
-- Mid widths (around 768px): a top tab bar, two-column track cards when space allows, and a labelled quick-log
-  button.
-- Wide screens (1100px and up): a left side nav and a multi-column dashboard, including a row of momentum rings
-  in the Today header.
+What the app takes from them:
 
-Because the user logs by hand, one-tap "Xong bước nhỏ" stays on the Today card, and a floating "Ghi nhanh"
-button (keyboard shortcut G, with L as an alias) is available on every non-editor page. The sheet remembers
-the last track, kind and duration in `localStorage` (`nhip:log-prefs`); these prefs are not part of the JSON
-export, so backups stay compatible. One-tap "Xong bước nhỏ" is unchanged: it still stores 0 minutes and the
-track's tiny-action text.
+- Canvas `#f5f7fa` with a faint dot grid, white panels with 1 px hairline borders, 8-12 px radii, ink `#0d1321`
+  primary buttons, mono (`ui-monospace`) eyebrows, numerals, pace tags and the timer readout.
+- One flow gradient (blue `#3b5bfd` to `#2a8de0` to cyan `#14b8c6`) used only where something connects or
+  progresses: the 7-day chain (nodes joined by links; an unbroken link carries a moving highlight), the weekly
+  target bar (a highlight runs over the reached part), the sprint bar, the milestone rail (diamond nodes on a
+  line filled to the share of milestones done), the Today header (dashed paths with travelling beams), and the
+  timer ring (gradient progress plus a rotating comet while running).
+- All flow animations are transform or stroke-dashoffset based, run only under
+  `prefers-reduced-motion: no-preference`, and pause when the tab is hidden (`html.is-hidden`). With reduced
+  motion the beams are removed and everything is static.
+
+Layout (audited automatically at 360, 390, 768, 1024, 1280 and 1440 px for horizontal overflow):
+
+- Up to 719 px: compact top brand, 5-item bottom tab bar (Hôm nay, Đồng hồ, Tuần, Thành quả, Cài đặt), round
+  quick-log button, timer dock above the tab bar while a session is open, safe-area insets.
+- 720-1099 px: top tab bar, two-column cards where they fit, labelled quick-log button.
+- 1100 px and up: left side nav; timer page splits into a sticky clock and a settings column (from 960 px).
+- 1400 px and up: wider content (up to 1380 px) and track cards that fill the row.
+
+Logging speed is unchanged: one-tap "Đã làm bước nhỏ" on each Today card, "Ghi nhanh" (G) everywhere, and
+"Bấm giờ học" on each card to start the timer for that track with the last-used mode.
+
+## 11. Study session timer
+
+Code: `src/core/timer.ts` (pure math, unit tested), `src/session.ts` (runtime), `src/views/timer.ts` (UI).
+
+- Modes: stopwatch (counts up), countdown (fixed minutes, capped at the target), Pomodoro. Pomodoro defaults to
+  25 minutes focus, 5 minutes short break, a 20 minute long break after every 4 focus blocks, following the usual
+  description of the technique (Wikipedia, "Pomodoro Technique", accessed 2026-11-15: 25-minute intervals, short
+  breaks, a 20-30 minute long break after four). All four values are configurable, with presets 25/5, 50/10 and
+  15/3.
+- State is a small JSON object in `localStorage` (`nhip:timer`): `startedAt`, `runStart` (null while paused),
+  accumulated running time `accMs`, and the index of the last announced boundary. Elapsed time is always
+  `accMs + (now - runStart)`, so reloads, sleeping tabs and other open tabs (via the `storage` event) agree. A
+  clock that moves backwards never yields negative time.
+- Ticking: a 1 s interval only while running and visible, plus one timeout at the next boundary (end of a
+  countdown or a Pomodoro phase). Each boundary is announced once (chime, notification) even after a reload.
+- Stop opens a save sheet with the track, minutes (Pomodoro counts focus minutes only), and a suggested type
+  (15 minutes or more suggests a full session). It saves the same `LogEntry` as quick log; "Thêm chi tiết" opens
+  the full log dialog pre-filled. Discard asks for confirmation.
+- Optional extras: a short WebAudio chime (primed on a user gesture), browser notifications, and a screen wake
+  lock that is re-acquired when the tab becomes visible again (the browser releases it when hidden; MDN Screen
+  Wake Lock API, accessed 2026-11-15). Unsupported features are shown as unavailable instead of failing.
