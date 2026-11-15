@@ -15,10 +15,12 @@ result tends to stall.
 
 ## 2. Name
 
-`nhip`, shown in the UI as "Nhịp" (Vietnamese for beat, rhythm, pace).
+The app is `nhip`, shown in the UI as "Nhịp" (Vietnamese for beat, rhythm, pace). The repository is
+`nexus-centric/tracking-status`; internal identifiers (IndexedDB name, backup `app` field, cache and
+`localStorage` keys) keep `nhip` so existing data and backups stay compatible.
 
 - It is the word the owner used for the core need: keep the pace ("giữ được nhịp độ").
-- One short word, ASCII-only in the repo name, readable by Vietnamese speakers without explanation.
+- One short word, ASCII-only, readable by Vietnamese speakers without explanation.
 - Follows the naming rule that app names must not use a `-lab` or `Lab` suffix.
 - Alternatives considered: `giu-nhip` (clearer but longer), `steady` and `cadence` (English, generic, more
   name collisions).

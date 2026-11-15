@@ -1,4 +1,4 @@
-# Nhip
+# Nhip (tracking-status)
 
 Keep a steady learning rhythm, even on busy days. Nhip ("Nhịp", Vietnamese for rhythm or pace) is a small
 browser app for tracking self-directed learning such as a DevOps lab or video editing. The UI is in Vietnamese.
@@ -49,7 +49,9 @@ example.com.
 ## Deploy
 
 `.github/workflows/pages.yml` builds and deploys to GitHub Pages on push to `main`, with actions pinned by
-commit SHA, Node 24, and `VITE_BASE=/<repo-name>/`. Dependabot checks npm and GitHub Actions weekly.
+commit SHA, Node 24, and `VITE_BASE=/<repo-name>/`. The repository is
+[nexus-centric/tracking-status](https://github.com/nexus-centric/tracking-status), served at
+https://nexus-centric.github.io/tracking-status/ once Pages uses GitHub Actions as its source. Dependabot checks npm and GitHub Actions weekly.
 
 ## Project layout
 
