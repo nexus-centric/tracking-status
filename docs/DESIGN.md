@@ -1,6 +1,6 @@
-# Tiến độ học: design notes
+# The Study Hub: design notes
 
-Status: v0.3, local only. Research accessed on 2026-11-15 (Asia/Saigon). Every source below was opened or
+Status: v0.4, local only. Research accessed on 2026-11-15 (Asia/Saigon). Every source below was opened or
 searched on that date; where only a secondary source was read, it is marked as such.
 
 ## 1. Problem
@@ -15,16 +15,19 @@ result tends to stall.
 
 ## 2. Name
 
-The app is shown as "Tiến độ học" ("learning progress"), with a small mono subtitle `tracking-status`, the
-repository name (`nexus-centric/tracking-status`). Earlier versions used "Nhịp"; on its own that word read as
-clipped and slogan-like in the UI, so it was dropped from all copy.
+The app is shown as "The Study Hub" (short name "Study Hub" for the installed PWA), with a small mono subtitle
+`tracking-status`, the repository name (`nexus-centric/tracking-status`). Earlier versions used "Nhịp" and then
+"Tiến độ học"; the owner chose the current name on 2026-11-15.
 
-- Plain, natural Vietnamese that says what the app tracks; no explanation needed.
-- Matches the repository name, so the app, the repo and the PWA install name agree.
+- The display name lives in one place, `src/core/brand.ts` (`APP_NAME`, `APP_SHORT_NAME`, `BACKUP_PREFIX`).
+  `vite.config.ts` fills `%APP_NAME%` and `%APP_DESCRIPTION%` in `index.html` and generates
+  `manifest.webmanifest` from the same module, so a rename is a one-file change.
 - Internal identifiers keep `nhip` (IndexedDB database, backup `app` field, `localStorage` keys) so existing data
-  and backups stay compatible. The service worker cache was renamed to `tracking-status-v2`.
-- Copy rules applied in the rewrite: full sentences addressed to "bạn", no slogans or gamified hype, the same
-  term for the same thing everywhere ("buổi học", "bước nhỏ", "đợt học", "độ đều đặn", "thành quả").
+  and backups stay compatible; the repository and the Pages path stay `tracking-status`. The service worker cache
+  is `tracking-status-v3`.
+- The UI copy stays Vietnamese. Copy rules: full sentences addressed to "bạn", no slogans or gamified hype, the
+  same term for the same thing everywhere ("buổi học", "bước nhỏ", "đợt học", "lộ trình", "mục", "độ đều đặn",
+  "thành quả").
 
 ## 3. Research summary
 
@@ -203,6 +206,69 @@ and end day, and milestones. Progress = finished milestones / total. Time = elap
 `behind`; plus `not-started`, `overdue`, `done`, `dropped`, `no-milestones`. Sprints outside 14-28 days get a
 warning, not a block. One active sprint per track; starting a new one closes the old one as dropped.
 
+## 5a. Roadmap and sprint planning
+
+Code: `src/core/roadmap-parse.ts`, `src/core/roadmap.ts`, `src/core/plan.ts`, views in `src/views/roadmap.ts`.
+Tests: `tests/roadmap-parse.test.ts`, `tests/roadmap.test.ts`, `tests/plan.test.ts`.
+
+Problem: with an existing syllabus (a 30-lesson course, a book) typing every milestone by hand was the main
+friction, and there was no view of the whole path, only of the current sprint.
+
+Model. Each track has an ordered list of roadmap items (`RoadmapItem`: title, optional phase, optional estimate
+in minutes or sessions, optional link, done and doneOn). Sprint milestones may carry `itemId`; a linked milestone
+and its item always share done state (`setItemDone`, `setMilestoneDone`). Sprints that are already closed (done
+or dropped) are history and are not changed when an item is ticked later. Sprint status gains `planned` for
+future sprints of a plan.
+
+Import (paste box, file, or the optional box on the new-track form). Detection: text starting with `[` or `{` is
+JSON (`[{title, phase?, minutes? | sessions?, link?, done?}]` or `{items: [...]}`); a first line with a separator
+and a `title`/`tên` column is CSV; anything else is a Markdown-like outline:
+
+- `# heading` starts a phase. If the text has any list markers (`-`, `*`, `+`, `1.`, `1)`, `a)`), an unindented
+  line without a marker is also a phase; without any markers every line is an item.
+- A list item with deeper-indented children is a group; its children get the phase `Phase · Group`.
+- A trailing `(45m)`, `(45 phút)`, `(1h30)`, `(1,5 giờ)` is a minute estimate; `[2]`, `[2 buổi]`, `(2 buổi)` is
+  a session estimate. A bare `(3)` is kept as part of the title because it is ambiguous.
+- `- [x]` marks an item done (without a date, so it does not inflate the recent pace). Markdown links,
+  `<url>` and a trailing bare URL become the item link. At most 500 items.
+
+The preview shows counts, phases and the first 80 items, plus the plan summary; one confirm writes the items and
+the sprints. Nothing is saved before that.
+
+Effort. One item costs `minutes / sessionMinutes` sessions, or its session estimate, or `1 / itemsPerSession`
+sessions when it has no estimate. Defaults: 45 minutes per session, 1 item per session; both are per track and
+editable in the import and planner screens. Weekly capacity = `min(weeklyTarget, 7 - restDays)` sessions, one
+session per active day. These are assumptions, not research findings.
+
+Planner (`proposePlan`, `layoutPlan`). Items are filled in roadmap order into sprints of the chosen length
+(2, 3 or 4 weeks; default 3) up to `weeks x capacity` sessions. An item larger than a whole sprint gets a sprint
+of its own and a warning. A short tail (needing under 2 weeks) is folded into the previous sprint when that sprint
+can grow to at most 4 weeks; otherwise the last sprint is shortened, never below 2 weeks (`SPRINT_MIN_DAYS`,
+`SPRINT_MAX_DAYS`). Sprints follow each other without gaps. The user can change each sprint's length and title
+and move items across a boundary before creating. Creating replaces earlier `planned` sprints of the track; the
+active sprint is kept unless the user ticks "close and re-plan" (pre-ticked only when it is behind or overdue).
+With no active sprint, the first new sprint is active and the rest are planned. A planned sprint starts only when
+the user presses "Bắt đầu đợt này" or "Bắt đầu từ hôm nay" (the latter shifts it and later planned sprints by the
+same number of days).
+
+Progress. `% done` = done effort / total effort when at least one item has an estimate, otherwise done items /
+items. Phase boundaries are ticks on the progress line; the line has the same moving beam as the sprint bar and
+stops under reduced motion or a hidden tab.
+
+Projection (`projectRoadmap`), shown as an estimate with the assumptions written out on screen:
+
+- Window: the last 28 days, or fewer when the track (or its first record) is younger.
+- Active day: a day with a log of the track or an item finished. Pace = effort of items finished in the window /
+  active days in the window. Observed frequency = active days x 7 / window days.
+- Recent-pace finish = today + ceil(remaining / pace x 7 / frequency) days.
+- Target finish = today + ceil(remaining / weeklyTarget x 7) days, i.e. one session per active day at the target.
+- Planned finish = the end of the last open sprint holding a remaining item, when every remaining item is planned.
+- Confidence: `ok` with at least 14 days of window, 4 active days and 3 items; `low` with less; `none` with no
+  finished item in the window (no recent-pace date is shown).
+- Re-plan suggestion (never automatic): a linked active sprint is overdue, the recent-pace finish is more than
+  7 days after the planned finish, or some remaining items are in no sprint. Dates change only when the user
+  confirms a new plan.
+
 ## 6. Weekly review
 
 Code: `src/core/summary.ts`, tests: `tests/summary.test.ts`. For the selected week, per track: days against
@@ -220,14 +286,19 @@ The log dialog always asks for the next small step so it is ready after a break 
 
 ## 8. Storage, backup and privacy
 
-IndexedDB database `nhip` with stores `tracks`, `sprints`, `logs`, `marks`, `reviews`, `settings`. Data never
+IndexedDB database `nhip`, schema version 2 (`src/core/schema.ts`): stores `tracks`, `sprints`, `roadmap`,
+`logs`, `marks`, `reviews`, `settings`. Upgrades are incremental (`storesToCreate(oldVersion)`): a version 1
+database keeps all its data and only gains the `roadmap` store. After every load `migrateData` renumbers roadmap
+orders per track and drops milestone links to missing items, writing back only the records it changed. An open
+tab with the old version closes its connection on `versionchange` so the new version can upgrade. Data never
 leaves the browser and is not hardcoded; demo data is generated on demand and flagged.
 
-Backup file (`src/core/bundle.ts`): `{ app: "nhip", version: 1, exportedAt, tracks, sprints, logs, marks,
-reviews, settings }`, named `tracking-status-backup-YYYY-MM-DD.json`.
+Backup file (`src/core/bundle.ts`): `{ app: "nhip", version: 2, exportedAt, tracks, sprints, roadmap, logs, marks,
+reviews, settings }`, named `study-hub-backup-YYYY-MM-DD.json` (older files were named
+`tracking-status-backup-*.json`; the name does not matter for import).
 
-- Versioned: a missing version is read as 1; a non-integer or newer version is rejected with a message asking
-  to update the app first.
+- Version 1 files (and files without a version) import as version 2 with an empty roadmap.
+- A non-integer or newer version is rejected with a message asking to update the app first.
 - Validated: every record is normalized; invalid or orphaned records (unsafe link schemes, non-image data URLs,
   unknown tracks) are dropped and counted.
 - Preview: the import dialog shows per-type counts in the file, in the browser, and what a merge would add.
@@ -250,6 +321,9 @@ Images are resized to at most 1280 px and stored as JPEG data URLs inside the lo
 ## 9. Known limitations
 
 - No sync between devices; moving data means export and import.
+- Roadmap projections assume the recent pace continues and every session is the same length; they ignore planned
+  pauses in the future. Estimates in the pasted text are taken as written. Reordering is by up/down buttons, no
+  drag and drop yet.
 - Timer notifications from a hidden tab can arrive late: MDN (setTimeout, accessed 2026-11-15) documents
   throttling of timers in inactive tabs (at least 1 s in Chrome, longer under intensive throttling). The elapsed
   time itself stays correct because it is recomputed from timestamps.

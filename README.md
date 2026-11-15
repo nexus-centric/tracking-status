@@ -1,8 +1,14 @@
-# Tiến độ học (tracking-status)
+# The Study Hub (tracking-status)
 
 A small browser app for keeping self-directed learning steady, even on busy days: a DevOps lab, video editing,
-a technical book. The UI is in Vietnamese. The display name "Tiến độ học" means "learning progress"; the small
-subtitle `tracking-status` matches the repository name.
+a technical book. The UI is in Vietnamese. The display name is "The Study Hub" (set in `src/core/brand.ts`); the
+small subtitle `tracking-status` matches the repository name.
+
+- Whole roadmap per track: paste a course outline, a book's table of contents, Markdown, JSON or CSV; preview;
+  one confirm creates every item and splits the unfinished ones into 2-4 week sprints from the weekly target.
+  Items and sprint milestones stay in sync. The roadmap page shows % done (weighted by estimates when given),
+  finish dates at the recent pace, at the weekly target and per plan, with the assumptions spelled out, and
+  suggests a re-plan when you fall behind. Edit, reorder and delete items any time.
 
 - Learning tracks with 2-4 week sprints, each ending in a concrete deliverable and a few milestones.
 - A smallest step that still counts: one tap on Today logs it, and the "Ghi nhanh" button (or the G key) logs
@@ -26,7 +32,8 @@ Design rationale, research sources and formulas are in [docs/DESIGN.md](docs/DES
 ## Where the data lives
 
 Nothing is hardcoded. Everything you enter is saved in IndexedDB database `nhip` in the current browser profile
-(stores `tracks`, `sprints`, `logs`, `marks`, `reviews`, `settings`), loaded into memory at start and written
+(schema version 2, stores `tracks`, `sprints`, `roadmap`, `logs`, `marks`, `reviews`, `settings`; older
+databases are upgraded in place), loaded into memory at start and written
 through on every save. Small preferences and the running timer live in `localStorage` (`nhip:log-prefs`,
 `nhip:timer`, `nhip:timer-prefs`, `nhip:last-backup`, `nhip:backup-snooze`). The internal name `nhip` is kept so
 existing data and backups stay compatible.
@@ -46,7 +53,7 @@ Requires Node.js 20.19 or newer (CI uses Node 24).
 ```bash
 npm ci
 npm run dev        # http://localhost:5173
-npm test           # unit tests (rhythm math, sprints, summary, backup, timer)
+npm test           # unit tests (rhythm, sprints, roadmap parser, planner, projection, migration, backup, timer)
 npm run build      # type check and production build into dist/
 npm run preview    # serve dist/
 ```
@@ -71,8 +78,9 @@ https://nexus-centric.github.io/tracking-status/. Dependabot checks npm and GitH
 ## Project layout
 
 ```
-src/core/      pure logic: dates, rhythm, sprint, summary, re-entry, backup bundle, timer math, demo data
-src/views/     page and dialog rendering (Today, timer, track, week, results, settings)
+src/core/      pure logic: dates, rhythm, sprint, roadmap parser/progress/planner, schema, summary, re-entry,
+               backup bundle, timer math, brand, demo data
+src/views/     page and dialog rendering (Today, timer, track, roadmap, planner, week, results, settings)
 src/session.ts timer runtime: persistence, ticking, notifications, chime, wake lock
 src/db.ts      IndexedDB persistence
 src/state.ts   in-memory state with write-through saves, import preview and merge/replace
