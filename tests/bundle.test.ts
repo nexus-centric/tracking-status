@@ -56,7 +56,8 @@ test('import rejects foreign files and drops invalid or orphaned records', () =>
 
 test('import checks the schema version', () => {
   assert.doesNotThrow(() => parseBundle('{"app":"nhip"}'), 'a missing version is read as version 1');
-  assert.throws(() => parseBundle('{"app":"nhip","version":2}'), /mới hơn/);
+  assert.doesNotThrow(() => parseBundle('{"app":"nhip","version":2}'));
+  assert.throws(() => parseBundle('{"app":"nhip","version":3}'), /mới hơn/);
   assert.throws(() => parseBundle('{"app":"nhip","version":"1"}'), /phiên bản/);
 });
 
@@ -81,4 +82,43 @@ test('merge adds missing records and keeps existing ones', () => {
   const c = countBundle(data);
   assert.equal(c.logs, demo.logs.length);
   assert.ok(c.minutes > 0);
+});
+
+test('version 1 backups still import, with an empty roadmap', () => {
+  const v1 = { app: 'nhip', version: 1, exportedAt: '2026-11-01T00:00:00Z', tracks: [{ id: 't1', name: 'A', createdAt: '2026-11-01' }], sprints: [{ id: 's', trackId: 't1', start: '2026-11-01', end: '2026-11-21', status: 'active', milestones: [{ id: 'm', text: 'x' }] }], logs: [], marks: [], reviews: [], roadmap: [{ id: 'ignored', trackId: 't1', title: 'not part of v1' }] };
+  const { bundle } = parseBundle(JSON.stringify(v1));
+  assert.equal(bundle.version, 2);
+  assert.deepEqual(bundle.roadmap, []);
+  assert.equal(bundle.sprints.length, 1);
+  assert.equal(countBundle(bundle).roadmap, 0);
+});
+
+test('version 2 round-trip keeps roadmap, planned sprints and milestone links; validates items', () => {
+  const data = {
+    tracks: [{ id: 't1', name: 'A', color: '#2f6f62', why: '', tinyAction: '', plan: '', weeklyTarget: 5, restDays: [], nextStep: '', pauses: [], archived: false, createdAt: '2026-11-01', sessionMinutes: 60, itemsPerSession: 1.5 }],
+    sprints: [{ id: 's', trackId: 't1', title: 'Đợt 2', deliverable: '', start: '2026-12-01', end: '2026-12-14', status: 'planned' as const, milestones: [{ id: 'm', text: 'Bài 1', done: false, itemId: 'i1' }, { id: 'm2', text: 'Bài x', done: false, itemId: 'missing' }] }],
+    roadmap: [
+      { id: 'i1', trackId: 't1', order: 0, title: 'Bài 1', phase: 'P1', estimate: { unit: 'min' as const, value: 30 }, link: 'https://e.example', done: true, doneOn: '2026-11-10' },
+      { id: 'i2', trackId: 'ghost', order: 1, title: 'orphan', done: false },
+    ],
+    logs: [], marks: [], reviews: [], settings: { busyPerMonth: 2 },
+  };
+  const raw = JSON.parse(JSON.stringify(makeBundle(data)));
+  raw.roadmap.push({ id: 'i3', trackId: 't1', title: 'x', estimate: { unit: 'week', value: 2 }, link: 'javascript:1', done: 'yes', doneOn: '2026-11-10' }, { id: 'i4', trackId: 't1', title: '   ' });
+  const { bundle, dropped } = parseBundle(JSON.stringify(raw));
+  assert.equal(bundle.version, 2);
+  assert.equal(bundle.roadmap.length, 2);
+  assert.deepEqual(bundle.roadmap[0], { ...data.roadmap[0], demo: undefined });
+  assert.deepEqual(bundle.roadmap[1], { id: 'i3', trackId: 't1', order: 0, title: 'x', phase: undefined, estimate: undefined, link: undefined, done: false, doneOn: undefined, demo: undefined });
+  assert.equal(dropped, 2, 'the orphan and the untitled item');
+  assert.equal(bundle.sprints[0].status, 'planned');
+  assert.equal(bundle.sprints[0].milestones[0].itemId, 'i1');
+  assert.equal(bundle.sprints[0].milestones[1].itemId, undefined, 'a link to a missing item is dropped');
+  assert.equal(bundle.tracks[0].sessionMinutes, 60);
+  assert.equal(bundle.tracks[0].itemsPerSession, 1.5);
+  const c = countBundle(bundle);
+  assert.equal(c.roadmap, 2);
+  const merged = mergeData({ ...bundle, roadmap: [bundle.roadmap[0]] }, bundle);
+  assert.equal(merged.added.roadmap, 1);
+  assert.equal(merged.data.roadmap.length, 2);
 });

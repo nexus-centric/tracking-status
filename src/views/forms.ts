@@ -5,7 +5,7 @@ import { currentlyPaused, momentum, todayState } from '../core/rhythm.js';
 import { activeSprint } from '../core/sprint.js';
 import type { Evidence, LogEntry, LogKind, Track } from '../core/types.js';
 import { clientCenter, queueCelebration } from '../motion.js';
-import { ctxFor, getTrack, newId, saveLog, saveSprint, saveTrack, state } from '../state.js';
+import { ctxFor, getTrack, markMilestone, newId, saveLog, saveSprint, saveTrack, state } from '../state.js';
 import { $, esc, imageToDataUrl, isHttpUrl, openModal, toast } from '../ui.js';
 import { colorDot } from './parts.js';
 
@@ -184,8 +184,7 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
     remember({ trackId: track!.id, kind: k, minutes: entry.minutes });
     await saveLog(entry);
     if (sprintId && msId) {
-      const s = state.sprints.find((x) => x.id === sprintId);
-      if (s) await saveSprint({ ...s, milestones: s.milestones.map((m) => (m.id === msId ? { ...m, done: true, doneOn: m.doneOn ?? day } : m)) });
+      await markMilestone(sprintId, msId, true, day);
     }
     const next = field('nextStep').value.trim();
     if (next !== track!.nextStep) await saveTrack({ ...track!, nextStep: next });
@@ -339,7 +338,8 @@ export function openFinishSprint(sprintId: string): void {
     const status = (f.querySelector<HTMLInputElement>('[name="status"]:checked')?.value ?? 'done') as 'done' | 'dropped';
     await saveSprint({ ...s, status, closedOn: today(), reflection: (f.elements.namedItem('reflection') as HTMLTextAreaElement).value.trim() || undefined });
     dlg.close();
-    toast(status === 'done' ? 'Đã khép lại đợt học. Hãy đặt đợt tiếp theo khi bạn sẵn sàng.' : 'Đã dừng đợt học. Không sao cả, lần sau hãy đặt một đợt nhỏ hơn.');
+    const nextPlanned = state.sprints.some((x) => x.trackId === s.trackId && x.status === 'planned');
+    toast(nextPlanned ? 'Đã khép lại đợt học. Đợt kế tiếp trong kế hoạch đang chờ bạn bắt đầu.' : status === 'done' ? 'Đã khép lại đợt học. Hãy đặt đợt tiếp theo khi bạn sẵn sàng.' : 'Đã dừng đợt học. Không sao cả, lần sau hãy đặt một đợt nhỏ hơn.');
     location.hash = `#/t/${s.trackId}`;
   });
 }

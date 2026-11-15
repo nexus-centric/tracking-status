@@ -1,28 +1,30 @@
 // IndexedDB persistence. The whole dataset is small, so it is loaded into memory at start
 // and every change is written through record by record.
-import type { DayMark, LogEntry, Settings, Sprint, Track, WeekReview } from './core/types.js';
+import type { DayMark, LogEntry, RoadmapItem, Settings, Sprint, Track, WeekReview } from './core/types.js';
 import { DEFAULT_SETTINGS } from './core/types.js';
+import { DB_VERSION, migrateData, storesToCreate } from './core/schema.js';
 
 const DB_NAME = 'nhip';
-const VERSION = 1;
-export const STORES = ['tracks', 'sprints', 'logs', 'marks', 'reviews'] as const;
+export const STORES = ['tracks', 'sprints', 'roadmap', 'logs', 'marks', 'reviews'] as const;
 export type StoreName = (typeof STORES)[number];
 
 let dbp: Promise<IDBDatabase> | null = null;
 
 function open(): Promise<IDBDatabase> {
   dbp ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, VERSION);
-    req.onupgradeneeded = () => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    // Versioned upgrade: only the stores added after the old version are created; existing data is kept.
+    req.onupgradeneeded = (e) => {
       const db = req.result;
-      db.createObjectStore('tracks', { keyPath: 'id' });
-      db.createObjectStore('sprints', { keyPath: 'id' });
-      db.createObjectStore('logs', { keyPath: 'id' });
-      db.createObjectStore('marks', { keyPath: 'id' });
-      db.createObjectStore('reviews', { keyPath: 'weekStart' });
-      db.createObjectStore('settings');
+      for (const s of storesToCreate(e.oldVersion)) {
+        if (!db.objectStoreNames.contains(s.name)) db.createObjectStore(s.name, s.keyPath ? { keyPath: s.keyPath } : undefined);
+      }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      // Let a newer version of the app in another tab upgrade the database instead of waiting on this tab.
+      req.result.onversionchange = () => { req.result.close(); dbp = null; };
+      resolve(req.result);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbp;
@@ -46,6 +48,7 @@ function req<T>(r: IDBRequest<T>): Promise<T> {
 export interface Data {
   tracks: Track[];
   sprints: Sprint[];
+  roadmap: RoadmapItem[];
   logs: LogEntry[];
   marks: DayMark[];
   reviews: WeekReview[];
@@ -55,15 +58,23 @@ export interface Data {
 export async function loadAll(): Promise<Data> {
   const db = await open();
   const tx = db.transaction([...STORES, 'settings'], 'readonly');
-  const [tracks, sprints, logs, marks, reviews, settings] = await Promise.all([
+  const [tracks, sprints, roadmap, logs, marks, reviews, settings] = await Promise.all([
     req(tx.objectStore('tracks').getAll()),
     req(tx.objectStore('sprints').getAll()),
+    req(tx.objectStore('roadmap').getAll()),
     req(tx.objectStore('logs').getAll()),
     req(tx.objectStore('marks').getAll()),
     req(tx.objectStore('reviews').getAll()),
     req(tx.objectStore('settings').get('settings')),
   ]);
-  return { tracks, sprints, logs, marks, reviews, settings: { ...DEFAULT_SETTINGS, ...(settings ?? {}) } };
+  const m = migrateData({ tracks, sprints, roadmap, logs, marks, reviews, settings: { ...DEFAULT_SETTINGS, ...(settings ?? {}) } });
+  if (m.changedItems.length || m.changedSprints.length) {
+    const wtx = db.transaction(['roadmap', 'sprints'], 'readwrite');
+    for (const i of m.changedItems) wtx.objectStore('roadmap').put(i);
+    for (const s of m.changedSprints) wtx.objectStore('sprints').put(s);
+    await done(wtx);
+  }
+  return m.data;
 }
 
 export async function put(store: StoreName, value: unknown): Promise<void> {
@@ -87,6 +98,17 @@ export async function putSettings(s: Settings): Promise<void> {
   await done(tx);
 }
 
+/** Writes several records of several stores in one transaction. */
+export async function putMany(writes: { store: StoreName; value: unknown }[], deletes: { store: StoreName; key: string }[] = []): Promise<void> {
+  if (!writes.length && !deletes.length) return;
+  const db = await open();
+  const names = [...new Set([...writes.map((w) => w.store), ...deletes.map((d) => d.store)])];
+  const tx = db.transaction(names, 'readwrite');
+  for (const w of writes) tx.objectStore(w.store).put(w.value);
+  for (const d of deletes) tx.objectStore(d.store).delete(d.key);
+  await done(tx);
+}
+
 /** Replaces the whole dataset in one transaction. */
 export async function replaceAll(data: Data): Promise<void> {
   const db = await open();
@@ -94,6 +116,7 @@ export async function replaceAll(data: Data): Promise<void> {
   for (const s of STORES) tx.objectStore(s).clear();
   for (const t of data.tracks) tx.objectStore('tracks').put(t);
   for (const s of data.sprints) tx.objectStore('sprints').put(s);
+  for (const i of data.roadmap) tx.objectStore('roadmap').put(i);
   for (const l of data.logs) tx.objectStore('logs').put(l);
   for (const m of data.marks) tx.objectStore('marks').put(m);
   for (const r of data.reviews) tx.objectStore('reviews').put(r);

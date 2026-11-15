@@ -4,7 +4,10 @@ import { fmtMinutes } from '../core/format.js';
 import { currentlyPaused, last7, momentum, weekStreak } from '../core/rhythm.js';
 import { activeSprint, defaultEnd, lengthWarning, sprintProgress } from '../core/sprint.js';
 import type { Milestone, Sprint, Track } from '../core/types.js';
-import { ctxFor, getTrack, newId, saveSprint, saveTrack, state } from '../state.js';
+import { commit, ctxFor, getTrack, itemsOf, markMilestone, newId, saveSprint, saveTrack, state } from '../state.js';
+import { importChanges, plannedCard, roadmapCard } from './roadmap.js';
+import { parseRoadmapInput, type ParseOutcome } from '../core/roadmap-parse.js';
+import { costPrefs } from '../core/roadmap.js';
 import { esc, toast } from '../ui.js';
 import { colorDot, dots7, heat, restDaysText, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
 import { demoBanner } from './today.js';
@@ -34,7 +37,8 @@ export function trackView(id: string, params: URLSearchParams): View {
   const ctx = ctxFor(t);
   const paused = currentlyPaused(t, d);
   const s = activeSprint(state.sprints, t.id);
-  const past = state.sprints.filter((x) => x.trackId === t.id && x.status !== 'active').sort((a, b) => (a.start < b.start ? 1 : -1));
+  const hasPlanned = state.sprints.some((x) => x.trackId === t.id && x.status === 'planned');
+  const past = state.sprints.filter((x) => x.trackId === t.id && (x.status === 'done' || x.status === 'dropped')).sort((a, b) => (a.start < b.start ? 1 : -1));
   const logs = state.logs.filter((l) => l.trackId === t.id).sort((a, b) => (a.day === b.day ? (a.createdAt < b.createdAt ? 1 : -1) : a.day < b.day ? 1 : -1));
   const total = logs.reduce((a, l) => a + l.minutes, 0);
   const l7 = last7(ctx);
@@ -66,7 +70,9 @@ export function trackView(id: string, params: URLSearchParams): View {
       <p><span class="lbl">Bước tiếp theo</span>${esc(t.nextStep || 'chưa ghi')}</p>
     </div>
   </section>
-  ${s ? sprintCard(s) : `<section class="card"><h2>Đợt học</h2><p class="muted">Việc này chưa có đợt học nào đang chạy. Một đợt 2 đến 4 tuần, kết thúc bằng một sản phẩm cụ thể, giúp bạn biết rõ mình đang tiến tới đâu.</p><a class="btn primary" href="#/t/${t.id}?new-sprint=1">Đặt đợt học mới</a></section>`}
+  ${roadmapCard(t)}
+  ${s ? sprintCard(s) : hasPlanned ? '' : `<section class="card"><h2>Đợt học</h2><p class="muted">Việc này chưa có đợt học nào đang chạy. Một đợt 2 đến 4 tuần, kết thúc bằng một sản phẩm cụ thể, giúp bạn biết rõ mình đang tiến tới đâu.</p><div class="row gap wrap">${itemsOf(t.id).some((i) => !i.done) ? `<a class="btn primary" href="#/t/${t.id}/plan">Chia lộ trình thành các đợt</a><a class="btn ghost" href="#/t/${t.id}?new-sprint=1">Tự đặt một đợt</a>` : `<a class="btn primary" href="#/t/${t.id}?new-sprint=1">Đặt đợt học mới</a>`}</div></section>`}
+  ${plannedCard(t)}
   <section class="card">
     <h2>Các buổi học đã ghi</h2>
     ${logs.length ? `<ol class="logs">${logs.slice(0, 60).map((l) => `<li class="log">
@@ -98,7 +104,7 @@ function sprintCard(s: Sprint): string {
     ${sprintBar(s, d)}
     <p class="small muted">${fmtDay(s.start)} - ${fmtDay(s.end)} · đã qua ${p.elapsed}/${p.totalDays} ngày${p.pace === 'behind' ? ' · bạn có thể bớt một mốc hoặc chia mốc nhỏ hơn' : ''}</p>
     <ul class="milestones ms-rail" style="--done:${s.milestones.length ? (s.milestones.filter((m) => m.done).length / s.milestones.length).toFixed(3) : 0}">${s.milestones
-      .map((m) => `<li class="${m.done ? 'done' : ''}"><label><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${m.id}" ${m.done ? 'checked' : ''}><span>${esc(m.text)}</span></label>${m.doneOn ? `<span class="small muted">${fmtDay(m.doneOn)}</span>` : ''}<button class="link-btn" data-act="ms-del" data-sprint="${s.id}" data-ms="${m.id}" aria-label="Xoá mốc">Xoá</button></li>`)
+      .map((m) => `<li class="${m.done ? 'done' : ''}"><label><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${m.id}" ${m.done ? 'checked' : ''}><span>${esc(m.text)}</span></label>${m.itemId ? '<span class="badge" title="Mốc này là một mục trong lộ trình; đánh dấu ở đâu cũng được">lộ trình</span>' : ''}${m.doneOn ? `<span class="small muted">${fmtDay(m.doneOn)}</span>` : ''}<button class="link-btn" data-act="ms-del" data-sprint="${s.id}" data-ms="${m.id}" aria-label="Xoá mốc">Xoá</button></li>`)
       .join('')}</ul>
     <form class="row gap ms-add" data-sprint="${s.id}"><input name="ms" placeholder="Thêm một mốc, ví dụ: viết README" class="grow" maxlength="300"><button class="btn small">Thêm mốc</button></form>
     <div class="row gap wrap"><a class="btn ghost small" href="#/t/${s.trackId}/sprint/${s.id}">Chỉnh sửa đợt</a><button class="btn small" data-act="finish-sprint" data-id="${s.id}">Kết thúc đợt học</button></div>
@@ -158,7 +164,11 @@ export function trackEditor(id?: string): View {
         </div>
         <p class="small muted">Đạt mục tiêu tuần quan trọng hơn học liền mạch từng ngày. Ngày nghỉ cố định không bao giờ bị tính là bỏ lỡ.</p>
       </fieldset>
-      ${t ? '' : `<fieldset class="card"><legend>Đợt học đầu tiên (2 đến 4 tuần)</legend>
+      ${t ? '' : `<fieldset class="card rm-quick"><legend>Lộ trình (không bắt buộc)</legend>
+        <label class="field"><span>Có sẵn giáo trình hay danh sách bài? Dán vào đây, mỗi dòng một mục</span><textarea name="roadmap" rows="5" spellcheck="false" placeholder="# Phần 1: Nhập môn&#10;- Bài 1: Giới thiệu (20m)&#10;- Bài 2: Cài đặt (45m)"></textarea></label>
+        <p class="small muted rm-quick-sum">App sẽ tách thành từng mục, chia thành các đợt 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.</p>
+      </fieldset>`}
+      ${t ? '' : `<fieldset class="card first-sprint"><legend>Đợt học đầu tiên (2 đến 4 tuần)</legend>
         <label class="field"><span>Tên đợt</span><input name="sprint" maxlength="200" placeholder="Ví dụ: GitOps với Argo CD"></label>
         <label class="field"><span>Sản phẩm cụ thể ở cuối đợt</span><input name="deliverable" maxlength="500" placeholder="Thứ có thể cho người khác xem: repo, video, bản ghi âm, bài viết"></label>
         <div class="grid2">
@@ -190,6 +200,18 @@ export function trackEditor(id?: string): View {
           (form.elements.namedItem('milestones') as HTMLTextAreaElement).value = tp.milestones.join('\n');
         }),
       );
+      const rmText = form.elements.namedItem('roadmap') as HTMLTextAreaElement | null;
+      const rmParse = (): ParseOutcome | null => { try { return rmText?.value.trim() ? parseRoadmapInput(rmText.value) : null; } catch { return null; } };
+      rmText?.addEventListener('input', () => {
+        const r = rmParse();
+        const sum = root.querySelector('.rm-quick-sum')!;
+        const n = r?.items.length ?? 0;
+        let msg = 'App sẽ tách thành từng mục, chia thành các đợt 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.';
+        if (rmText.value.trim() && !n) { try { parseRoadmapInput(rmText.value); msg = 'Chưa nhận ra mục nào.'; } catch (x) { msg = (x as Error).message; } }
+        if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Khi tạo việc học, app chia luôn thành các đợt 3 tuần; phần "Đợt học đầu tiên" bên dưới không cần điền.`;
+        sum.textContent = msg;
+        root.querySelector<HTMLElement>('.first-sprint')!.hidden = n > 0;
+      });
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const err = form.querySelector('.err')!;
@@ -214,6 +236,15 @@ export function trackEditor(id?: string): View {
           demo: t?.demo,
         };
         let sprint: Sprint | null = null;
+        const rm = !t ? rmParse() : null;
+        if (rm && rm.items.length) {
+          const x = importChanges(track, rm, { weeks: 3, plan: true, replace: false, sessionMinutes: costPrefs(track).sessionMinutes, itemsPerSession: costPrefs(track).itemsPerSession });
+          await saveTrack(track);
+          await commit(x.newItems, x.changes?.create ?? []);
+          toast(`Đã tạo việc học với lộ trình ${x.newItems.length} mục và ${x.changes?.create.length ?? 0} đợt học.`);
+          location.hash = `#/t/${track.id}`;
+          return;
+        }
         if (!t) {
           const title = f('sprint')!.value.trim();
           const ms = (form.elements.namedItem('milestones') as HTMLTextAreaElement).value.split('\n').map((x) => x.trim()).filter(Boolean);
@@ -293,9 +324,7 @@ export function sprintEditor(t: Track, sprintId?: string): View {
 }
 
 export async function toggleMilestone(sprintId: string, msId: string, done: boolean): Promise<void> {
-  const s = state.sprints.find((x) => x.id === sprintId);
-  if (!s) return;
-  await saveSprint({ ...s, milestones: s.milestones.map((m) => (m.id === msId ? { ...m, done, doneOn: done ? today() : undefined } : m)) });
+  await markMilestone(sprintId, msId, done);
 }
 
 export async function addMilestone(sprintId: string, text: string): Promise<void> {

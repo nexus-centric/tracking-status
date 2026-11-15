@@ -21,6 +21,8 @@ export interface Track {
   pauses: Pause[];
   archived: boolean;
   createdAt: Day;
+  sessionMinutes?: number; // planning: minutes in one study session (default 45)
+  itemsPerSession?: number; // planning: roadmap items without an estimate finished per session (default 1)
   demo?: boolean;
 }
 
@@ -29,9 +31,30 @@ export interface Milestone {
   text: string;
   done: boolean;
   doneOn?: Day;
+  itemId?: string; // linked roadmap item; completing one completes the other
 }
 
-export type SprintStatus = 'active' | 'done' | 'dropped';
+/** Optional effort estimate of a roadmap item. */
+export interface Estimate {
+  unit: 'min' | 'session';
+  value: number;
+}
+
+/** One step of a track's whole learning roadmap (a lesson, a chapter, a lab). */
+export interface RoadmapItem {
+  id: string;
+  trackId: string;
+  order: number; // position inside the track's roadmap, ascending
+  title: string;
+  phase?: string; // section or module name
+  estimate?: Estimate;
+  link?: string;
+  done: boolean;
+  doneOn?: Day;
+  demo?: boolean;
+}
+
+export type SprintStatus = 'planned' | 'active' | 'done' | 'dropped';
 
 export interface Sprint {
   id: string;
@@ -99,10 +122,11 @@ export const DEFAULT_SETTINGS: Settings = { busyPerMonth: 2 };
 
 export interface Bundle {
   app: 'nhip';
-  version: 1;
+  version: 2;
   exportedAt: string;
   tracks: Track[];
   sprints: Sprint[];
+  roadmap: RoadmapItem[];
   logs: LogEntry[];
   marks: DayMark[];
   reviews: WeekReview[];

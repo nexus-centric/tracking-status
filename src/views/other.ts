@@ -111,7 +111,7 @@ export function settingsView(): View {
   <section class="card backup-card${due ? ' due' : ''}">
     <h2>Sao lưu và khôi phục</h2>
     <p class="backup-last ${due ? 'warn-text' : 'muted'}">${lastText}${due ? ' Bạn nên tải một bản mới.' : ''}</p>
-    <p class="muted small">Hiện có ${b.tracks.length} việc học, ${b.logs.length} buổi học, khoảng ${(size / 1024).toFixed(0)} KB. Xoá dữ liệu trình duyệt sẽ xoá luôn dữ liệu của app, nên hãy giữ một bản sao lưu ở nơi khác, ví dụ Google Drive.</p>
+    <p class="muted small">Hiện có ${b.tracks.length} việc học, ${b.roadmap.length} mục lộ trình, ${b.logs.length} buổi học, khoảng ${(size / 1024).toFixed(0)} KB. Xoá dữ liệu trình duyệt sẽ xoá luôn dữ liệu của app, nên hãy giữ một bản sao lưu ở nơi khác, ví dụ Google Drive.</p>
     <div class="row gap wrap"><button class="btn primary" data-act="export">Tải bản sao lưu (JSON)</button><label class="btn file-btn">Khôi phục từ file<input type="file" accept="application/json,.json" data-act="import" hidden></label></div>
     <p class="small muted">Khi khôi phục, app cho bạn xem trước số lượng và chọn gộp vào dữ liệu hiện có hoặc thay toàn bộ. File sao lưu theo định dạng phiên bản ${BUNDLE_VERSION}.</p>
     <p class="small muted persist-line" data-persist>Đang kiểm tra chế độ lưu trữ của trình duyệt...</p>

@@ -1,10 +1,13 @@
+import { APP_NAME } from '../core/brand.js';
 import { addDays, diffDays, fmtDay, today, weekStart, weekday } from '../core/dates.js';
 import { fmtMinutes } from '../core/format.js';
 import { busyUsed, currentlyPaused, daysSinceLastLog, momentum, todayState } from '../core/rhythm.js';
 import { reentry } from '../core/reentry.js';
 import { activeSprint, sprintProgress } from '../core/sprint.js';
 import type { Track } from '../core/types.js';
-import { ctxFor, hasDemo, state } from '../state.js';
+import { ctxFor, hasDemo, itemsOf, state } from '../state.js';
+import { costPrefs, roadmapProgress } from '../core/roadmap.js';
+import { roadmapLine } from './roadmap.js';
 import { esc } from '../ui.js';
 import { colorDot, dots7, heroFlow, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
 import { backupBanner, sessionStrip } from './today-extra.js';
@@ -69,7 +72,7 @@ function headline(total: number, done: number, needed: number): string {
 function emptyView(): string {
   return `<section class="empty">
     ${emptyMark}
-    <p class="eyebrow">Tiến độ học</p>
+    <p class="eyebrow">${esc(APP_NAME)}</p>
     <h1>Học đều đặn mỗi ngày, kể cả những hôm bận rộn</h1>
     <p>Mỗi việc học đi theo từng đợt 2 đến 4 tuần, cuối đợt có một sản phẩm cụ thể. Ngày nào cũng chỉ cần một bước nhỏ là được tính. Ngày nghỉ và ngày bận không làm đứt chuỗi ngày học; lỡ một hôm thì hôm sau làm tiếp là được.</p>
     <div class="row gap wrap"><a class="btn primary" href="#/new">Thêm việc học đầu tiên</a><button class="btn ghost" data-act="load-demo">Xem thử với dữ liệu mẫu</button></div>
@@ -138,10 +141,20 @@ function card(t: Track, index = 0): string {
         ${sprintBar(s, ctx.today)}
         ${p.next ? `<label class="next-ms"><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${p.next.id}"> <span>Mốc tiếp theo: ${esc(p.next.text)}</span></label>` : `<p class="small muted">Bạn đã xong mọi mốc của đợt này. <a href="#/t/${t.id}">Kết thúc đợt học</a></p>`}
       </div>`
-        : `<p class="small muted">Việc này chưa có đợt học. <a href="#/t/${t.id}?new-sprint=1">Đặt một đợt 2 đến 4 tuần</a> để có đích đến cụ thể.</p>`
+        : state.sprints.some((x) => x.trackId === t.id && x.status === 'planned')
+          ? `<p class="small muted">Đợt kế tiếp trong kế hoạch đang chờ. <a href="#/t/${t.id}">Bắt đầu đợt học</a></p>`
+          : `<p class="small muted">Việc này chưa có đợt học. <a href="#/t/${t.id}?new-sprint=1">Đặt một đợt 2 đến 4 tuần</a> để có đích đến cụ thể.</p>`
     }
+    ${roadmapMini(t)}
     ${t.plan ? `<p class="plan small">${esc(t.plan)}</p>` : ''}
   </article>`;
+}
+
+function roadmapMini(t: Track): string {
+  const items = itemsOf(t.id);
+  if (!items.length) return '';
+  const prog = roadmapProgress(items, costPrefs(t));
+  return `<a class="rm-mini" href="#/t/${t.id}/roadmap"><span class="small muted">Lộ trình</span>${roadmapLine(prog, t.color)}<span class="small mono">${prog.done}/${prog.total} · ${Math.round(prog.pct * 100)}%</span></a>`;
 }
 
 function pausedCard(t: Track, index = 0): string {

@@ -1,7 +1,8 @@
 import './style.css';
+import { APP_NAME, APP_SUBTITLE, BACKUP_PREFIX } from './core/brand.js';
 import { today } from './core/dates.js';
 import { momentum, todayState } from './core/rhythm.js';
-import { applyImport, ctxFor, deleteLog, deleteSprint, deleteTrack, getTrack, init, loadDemo, newId, onChange, previewImport, removeDemo, saveLog, saveSettings, saveTrack, setMark, state, wipe, exportBundle } from './state.js';
+import { applyImport, markItem, ctxFor, deleteLog, deleteSprint, deleteTrack, getTrack, init, loadDemo, newId, onChange, previewImport, removeDemo, saveLog, saveSettings, saveTrack, setMark, state, wipe, exportBundle } from './state.js';
 import { icoEvidence, icoPlus, icoSettings, icoTimer, icoToday, icoWeek, logoMark } from './icons.js';
 import { handleTimerAction, paintTimer, timerDockHtml, timerView } from './views/timer.js';
 import { onSessionChange, onTick, onAnnounce, getSession } from './session.js';
@@ -14,6 +15,7 @@ import { evidenceView, settingsView, weekView } from './views/other.js';
 import { todayView } from './views/today.js';
 import { addMilestone, removeMilestone, sprintEditor, toggleMilestone, trackEditor, trackView, type View } from './views/track.js';
 import { buildWeekSummary } from './core/summary.js';
+import { addItemFromText, importView, moveRoadmapItem, openItemEditor, planView, removeRoadmapItem, roadmapView, startPlanned } from './views/roadmap.js';
 import { weekStart } from './core/dates.js';
 
 const app = document.getElementById('app')!;
@@ -35,6 +37,9 @@ function route(): { view: View; key: string } {
     const t = getTrack(parts[1]);
     if (parts[2] === 'edit') return { view: trackEditor(parts[1]), key: '#/' };
     if (parts[2] === 'sprint' && t) return { view: sprintEditor(t, parts[3]), key: '#/' };
+    if (parts[2] === 'roadmap' && parts[3] === 'import') return { view: importView(parts[1]), key: '#/' };
+    if (parts[2] === 'roadmap') return { view: roadmapView(parts[1]), key: '#/' };
+    if (parts[2] === 'plan') return { view: planView(parts[1]), key: '#/' };
     return { view: trackView(parts[1], params), key: '#/' };
   }
   if (parts[0] === 'new') return { view: trackEditor(), key: '#/' };
@@ -51,7 +56,7 @@ function hashTrackId(): string | undefined {
 }
 
 function onEditorPage(): boolean {
-  return /^#\/(new|t\/[^/]+\/(edit|sprint))/.test(location.hash);
+  return /^#\/(new|t\/[^/]+\/(edit|sprint|plan|roadmap\/import))/.test(location.hash);
 }
 
 function navHtml(key: string): string {
@@ -69,7 +74,7 @@ function ensureShell(key: string): HTMLElement {
   if (!app.querySelector('.app-shell')) {
     app.innerHTML = `<div class="app-shell">
       <header class="top">
-        <a class="brand" href="#/"><span class="logo">${logoMark}</span><span class="brand-text"><b>Tiến độ học</b><small>tracking-status</small></span></a>
+        <a class="brand" href="#/"><span class="logo">${logoMark}</span><span class="brand-text"><b>${esc(APP_NAME)}</b><small>${esc(APP_SUBTITLE)}</small></span></a>
         <nav class="nav" aria-label="Chính"></nav>
       </header>
       <main class="main"></main>
@@ -112,7 +117,7 @@ function render(): void {
   const scroll = pageChange ? 0 : window.scrollY;
   const main = ensureShell(key);
   main.innerHTML = view.html;
-  document.title = view.title === 'Hôm nay' ? 'Tiến độ học' : `${view.title} · Tiến độ học`;
+  document.title = view.title === 'Hôm nay' ? APP_NAME : `${view.title} · ${APP_NAME}`;
   view.mount?.(app);
   if (pageChange) playEnter(main);
   celebrateAfterRender();
@@ -159,6 +164,11 @@ app.addEventListener('click', async (e) => {
     case 'resume-on': if (t) await resumeTrack(t, el.dataset.day); return;
     case 'finish-sprint': return openFinishSprint(id);
     case 'ms-del': return removeMilestone(el.dataset.sprint!, el.dataset.ms!);
+    case 'ri-up': return moveRoadmapItem(id, -1);
+    case 'ri-down': return moveRoadmapItem(id, 1);
+    case 'ri-edit': return openItemEditor(id);
+    case 'ri-del': return removeRoadmapItem(id);
+    case 'start-planned': return startPlanned(id, el.dataset.shift === '1');
     case 'img': {
       const src = el.dataset.src ?? '';
       if (src.startsWith('data:image/')) openModal(`<div class="img-view"><img src="${esc(src)}" alt="Ảnh thành quả"><button class="btn" data-close>Đóng</button></div>`, 'wide');
@@ -177,7 +187,7 @@ app.addEventListener('click', async (e) => {
     }
     case 'export': {
       const d = today();
-      download(`tracking-status-backup-${d}.json`, JSON.stringify(exportBundle(), null, 2));
+      download(`${BACKUP_PREFIX}-${d}.json`, JSON.stringify(exportBundle(), null, 2));
       markBackedUp();
       toast('Đã tải bản sao lưu. Hãy cất file ở nơi an toàn, ví dụ Google Drive.');
       if (location.hash === '' || location.hash === '#/' || location.hash.startsWith('#/settings')) render();
@@ -206,6 +216,7 @@ app.addEventListener('click', async (e) => {
 app.addEventListener('change', async (e) => {
   const el = e.target as HTMLInputElement;
   if (el.dataset.act === 'ms') await toggleMilestone(el.dataset.sprint!, el.dataset.ms!, el.checked);
+  else if (el.dataset.act === 'ri-done') await onItemChecked(el.dataset.id!, el.checked);
   else if (el.dataset.act === 'busy-limit') await saveSettings({ ...state.settings, busyPerMonth: Math.max(0, Math.min(10, Math.round(Number(el.value) || 0))) });
   else if (el.dataset.act === 'import' && el.files?.[0]) {
     const text = await el.files[0].text();
@@ -220,12 +231,29 @@ app.addEventListener('change', async (e) => {
 
 app.addEventListener('submit', async (e) => {
   const form = e.target as HTMLFormElement;
+  if (form.classList.contains('ri-add')) {
+    e.preventDefault();
+    const input = form.elements.namedItem('title') as HTMLInputElement;
+    if (input.value.trim()) { await addItemFromText(form.dataset.track!, input.value); toast('Đã thêm mục vào cuối lộ trình.'); }
+    return;
+  }
   if (form.classList.contains('ms-add')) {
     e.preventDefault();
     const input = form.elements.namedItem('ms') as HTMLInputElement;
     await addMilestone(form.dataset.sprint!, input.value);
   }
 });
+
+/** Ticking a roadmap item also completes its milestone; offer to log today's session when none is logged yet. */
+async function onItemChecked(id: string, done: boolean): Promise<void> {
+  const it = state.roadmap.find((x) => x.id === id);
+  if (!it) return;
+  await markItem(id, done);
+  if (!done) return;
+  const loggedToday = state.logs.some((l) => l.trackId === it.trackId && l.day === today());
+  if (loggedToday) toast(`Đã xong "${it.title}".`);
+  else toast(`Đã xong "${it.title}". Ghi luôn buổi học hôm nay?`, { label: 'Ghi buổi học', run: () => openLogDialog(it.trackId, { kind: 'full', note: it.title }) });
+}
 
 window.addEventListener('hashchange', render);
 
@@ -258,6 +286,7 @@ function openImportPreview(text: string): void {
     <table class="wk-table import-table"><thead><tr><th></th><th>Trong file</th><th>Hiện có</th><th>Gộp sẽ thêm</th></tr></thead><tbody>
       ${row('Việc học', p.file.tracks, p.current.tracks, p.merge.tracks)}
       ${row('Đợt học', p.file.sprints, p.current.sprints, p.merge.sprints)}
+      ${row('Mục lộ trình', p.file.roadmap, p.current.roadmap, p.merge.roadmap)}
       ${row('Buổi học', p.file.logs, p.current.logs, p.merge.logs)}
       ${row('Ngày nghỉ, ngày bận', p.file.marks, p.current.marks, p.merge.marks)}
       ${row('Nhận xét tuần', p.file.reviews, p.current.reviews, p.merge.reviews)}
@@ -281,7 +310,7 @@ function openImportPreview(text: string): void {
     }
     const r = await applyImport(p.bundle, mode());
     dlg.close();
-    toast(mode() === 'replace' ? `Đã khôi phục ${r.tracks} việc học và ${r.logs} buổi học.` : `Đã gộp xong, thêm ${r.addedLogs} buổi học.`);
+    toast(mode() === 'replace' ? `Đã khôi phục ${r.tracks} việc học, ${r.items} mục lộ trình và ${r.logs} buổi học.` : `Đã gộp xong, thêm ${r.addedItems} mục lộ trình và ${r.addedLogs} buổi học.`);
   });
 }
 onChange(() => {

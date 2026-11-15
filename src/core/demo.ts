@@ -127,6 +127,6 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
   const marks: DayMark[] = [
     { id: 'demo-k1', trackId: devops.id, day: d(-16), kind: 'busy', note: 'Trực sự cố đến khuya', demo: true },
   ];
-  return { app: 'nhip', version: 1, tracks: [devops, video, reading], sprints, logs, marks, reviews: [], settings: { ...DEFAULT_SETTINGS } };
+  return { app: 'nhip', version: 2, tracks: [devops, video, reading], sprints, roadmap: [], logs, marks, reviews: [], settings: { ...DEFAULT_SETTINGS } };
 }
 

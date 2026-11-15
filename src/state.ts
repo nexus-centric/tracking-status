@@ -3,12 +3,13 @@ import { canUseBusy, makeCtx, type Ctx } from './core/rhythm.js';
 import { today } from './core/dates.js';
 import { demoBundle } from './core/demo.js';
 import { countBundle, makeBundle, mergeData, parseBundle } from './core/bundle.js';
-import type { Bundle, Day, DayMark, LogEntry, Settings, Sprint, Track, WeekReview } from './core/types.js';
+import type { Bundle, Day, DayMark, LogEntry, RoadmapItem, Settings, Sprint, Track, WeekReview } from './core/types.js';
+import { setItemDone, setMilestoneDone, trackItems } from './core/roadmap.js';
 import { DEFAULT_SETTINGS } from './core/types.js';
 import * as db from './db.js';
 import { uid } from './core/id.js';
 
-export const state: db.Data = { tracks: [], sprints: [], logs: [], marks: [], reviews: [], settings: { ...DEFAULT_SETTINGS } };
+export const state: db.Data = { tracks: [], sprints: [], roadmap: [], logs: [], marks: [], reviews: [], settings: { ...DEFAULT_SETTINGS } };
 
 type Listener = () => void;
 const listeners: Listener[] = [];
@@ -47,12 +48,13 @@ export async function deleteSprint(id: string): Promise<void> {
 }
 
 export async function deleteTrack(id: string): Promise<void> {
-  const rm = async <K extends 'sprints' | 'logs' | 'marks'>(store: K) => {
+  const rm = async <K extends 'sprints' | 'roadmap' | 'logs' | 'marks'>(store: K) => {
     const list = state[store] as { id: string; trackId: string }[];
     for (const x of list.filter((x) => x.trackId === id)) await db.del(store, x.id);
     (state[store] as { id: string; trackId: string }[]) = list.filter((x) => x.trackId !== id);
   };
   await rm('sprints');
+  await rm('roadmap');
   await rm('logs');
   await rm('marks');
   state.tracks = state.tracks.filter((t) => t.id !== id);
@@ -91,24 +93,25 @@ export async function saveReview(r: WeekReview, silent = false): Promise<void> {
 export async function saveSettings(s: Settings): Promise<void> { state.settings = s; await db.putSettings(s); emit(); }
 
 export function exportBundle(): Bundle {
-  return makeBundle({ tracks: state.tracks, sprints: state.sprints, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings });
+  return makeBundle({ tracks: state.tracks, sprints: state.sprints, roadmap: state.roadmap, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings });
 }
 
 /** Replaces or merges the current data with a parsed backup. */
-export async function applyImport(bundle: Bundle, mode: 'merge' | 'replace'): Promise<{ tracks: number; logs: number; addedLogs: number }> {
-  const incoming: db.Data = { tracks: bundle.tracks, sprints: bundle.sprints, logs: bundle.logs, marks: bundle.marks, reviews: bundle.reviews, settings: bundle.settings };
-  const current: db.Data = { tracks: state.tracks, sprints: state.sprints, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings };
+export async function applyImport(bundle: Bundle, mode: 'merge' | 'replace'): Promise<{ tracks: number; logs: number; addedLogs: number; items: number; addedItems: number }> {
+  const incoming: db.Data = { tracks: bundle.tracks, sprints: bundle.sprints, roadmap: bundle.roadmap, logs: bundle.logs, marks: bundle.marks, reviews: bundle.reviews, settings: bundle.settings };
+  const current: db.Data = { tracks: state.tracks, sprints: state.sprints, roadmap: state.roadmap, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings };
   const data = mode === 'replace' ? incoming : mergeData(current, incoming).data;
   const addedLogs = mode === 'replace' ? data.logs.length : data.logs.length - current.logs.length;
   await db.replaceAll(data);
   Object.assign(state, data);
   emit();
-  return { tracks: data.tracks.length, logs: data.logs.length, addedLogs };
+  const addedItems = mode === 'replace' ? data.roadmap.length : data.roadmap.length - current.roadmap.length;
+  return { tracks: data.tracks.length, logs: data.logs.length, addedLogs, items: data.roadmap.length, addedItems };
 }
 
 export function previewImport(text: string) {
   const { bundle, dropped } = parseBundle(text);
-  const current: db.Data = { tracks: state.tracks, sprints: state.sprints, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings };
+  const current: db.Data = { tracks: state.tracks, sprints: state.sprints, roadmap: state.roadmap, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings };
   return { bundle, dropped, file: countBundle(bundle), current: countBundle(current), merge: mergeData(current, bundle).added };
 }
 
@@ -119,6 +122,7 @@ export async function loadDemo(): Promise<void> {
   const data: db.Data = {
     tracks: [...keep(state.tracks).filter((t) => !ids.has(t.id)), ...demo.tracks],
     sprints: [...keep(state.sprints), ...demo.sprints],
+    roadmap: [...keep(state.roadmap), ...demo.roadmap],
     logs: [...keep(state.logs), ...demo.logs],
     marks: [...keep(state.marks), ...demo.marks],
     reviews: state.reviews,
@@ -131,17 +135,55 @@ export async function loadDemo(): Promise<void> {
 
 export async function removeDemo(): Promise<void> {
   const keep = <T extends { demo?: boolean }>(l: T[]) => l.filter((x) => !x.demo);
-  const data: db.Data = { tracks: keep(state.tracks), sprints: keep(state.sprints), logs: keep(state.logs), marks: keep(state.marks), reviews: state.reviews, settings: state.settings };
+  const data: db.Data = { tracks: keep(state.tracks), sprints: keep(state.sprints), roadmap: keep(state.roadmap), logs: keep(state.logs), marks: keep(state.marks), reviews: state.reviews, settings: state.settings };
   await db.replaceAll(data);
   Object.assign(state, data);
   emit();
 }
 
 export async function wipe(): Promise<void> {
-  const data: db.Data = { tracks: [], sprints: [], logs: [], marks: [], reviews: [], settings: { ...DEFAULT_SETTINGS } };
+  const data: db.Data = { tracks: [], sprints: [], roadmap: [], logs: [], marks: [], reviews: [], settings: { ...DEFAULT_SETTINGS } };
   await db.replaceAll(data);
   Object.assign(state, data);
   emit();
 }
 
 export function newId(): string { return uid(); }
+
+// Roadmap -----------------------------------------------------------------
+
+export const itemsOf = (trackId: string): RoadmapItem[] => trackItems(state.roadmap, trackId);
+
+/** Writes items and sprints in one transaction and updates memory. */
+export async function commit(items: RoadmapItem[], sprints: Sprint[] = [], opts: { deleteItems?: string[]; deleteSprints?: string[] } = {}): Promise<void> {
+  for (const i of items) upsert(state.roadmap, i);
+  for (const sp of sprints) upsert(state.sprints, sp);
+  const di = new Set(opts.deleteItems ?? []);
+  const ds = new Set(opts.deleteSprints ?? []);
+  if (di.size) state.roadmap = state.roadmap.filter((x) => !di.has(x.id));
+  if (ds.size) state.sprints = state.sprints.filter((x) => !ds.has(x.id));
+  await db.putMany(
+    [...items.map((value) => ({ store: 'roadmap' as const, value })), ...sprints.map((value) => ({ store: 'sprints' as const, value }))],
+    [...[...di].map((key) => ({ store: 'roadmap' as const, key })), ...[...ds].map((key) => ({ store: 'sprints' as const, key }))],
+  );
+  emit();
+}
+
+export async function markItem(itemId: string, done: boolean, day: Day = today()): Promise<void> {
+  const r = setItemDone(state.roadmap, state.sprints, itemId, done, day);
+  if (r.item) await commit([r.item], r.sprints);
+}
+
+export async function markMilestone(sprintId: string, msId: string, done: boolean, day: Day = today()): Promise<void> {
+  const r = setMilestoneDone(state.roadmap, state.sprints, sprintId, msId, done, day);
+  await commit(r.item ? [r.item] : [], r.sprints);
+}
+
+/** Deletes items; milestones that pointed at them stay as plain milestones. */
+export async function deleteItems(ids: string[]): Promise<void> {
+  const set = new Set(ids);
+  const sprints = state.sprints
+    .filter((sp) => sp.milestones.some((m) => m.itemId && set.has(m.itemId)))
+    .map((sp) => ({ ...sp, milestones: sp.milestones.map((m) => (m.itemId && set.has(m.itemId) ? { ...m, itemId: undefined } : m)) }));
+  await commit([], sprints, { deleteItems: ids });
+}
