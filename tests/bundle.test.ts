@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeBundle, parseBundle } from '../src/core/bundle.js';
+import { countBundle, makeBundle, mergeData, parseBundle } from '../src/core/bundle.js';
 import { demoBundle } from '../src/core/demo.js';
 import { makeCtx, todayState, momentum } from '../src/core/rhythm.js';
 import { sprintProgress } from '../src/core/sprint.js';
@@ -52,4 +52,33 @@ test('import rejects foreign files and drops invalid or orphaned records', () =>
   assert.equal(bundle.marks.length, 0);
   assert.equal(dropped, 4);
   assert.equal(bundle.settings.busyPerMonth, 2);
+});
+
+test('import checks the schema version', () => {
+  assert.doesNotThrow(() => parseBundle('{"app":"nhip"}'), 'a missing version is read as version 1');
+  assert.throws(() => parseBundle('{"app":"nhip","version":2}'), /mới hơn/);
+  assert.throws(() => parseBundle('{"app":"nhip","version":"1"}'), /phiên bản/);
+});
+
+test('merge adds missing records and keeps existing ones', () => {
+  const demo = demoBundle('2026-11-15');
+  const current = { ...demo, logs: demo.logs.slice(0, 10), reviews: [{ weekStart: '2026-11-09', wins: 'cũ', blockers: '', next: '', updatedAt: '2026-11-10T00:00:00Z' }] };
+  const edited = { ...demo.logs[0], note: 'sửa trong file' };
+  const incoming = {
+    ...demo,
+    logs: [edited, ...demo.logs.slice(1)],
+    marks: [...demo.marks, { id: 'dup', trackId: demo.marks[0].trackId, day: demo.marks[0].day, kind: 'busy' as const }],
+    reviews: [{ weekStart: '2026-11-09', wins: 'mới', blockers: '', next: '', updatedAt: '2026-11-12T00:00:00Z' }, { weekStart: '2026-11-02', wins: 'x', blockers: '', next: '', updatedAt: '' }],
+  };
+  const { data, added } = mergeData(current, incoming);
+  assert.equal(data.logs.length, demo.logs.length);
+  assert.equal(added.logs, demo.logs.length - 10);
+  assert.equal(data.logs[0].note, demo.logs[0].note, 'existing record is kept');
+  assert.equal(added.marks, 0, 'a second mark on the same day is skipped');
+  assert.equal(added.tracks, 0);
+  assert.equal(added.reviews, 1);
+  assert.equal(data.reviews.find((r) => r.weekStart === '2026-11-09')!.wins, 'mới', 'newer review wins');
+  const c = countBundle(data);
+  assert.equal(c.logs, demo.logs.length);
+  assert.ok(c.minutes > 0);
 });

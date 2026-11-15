@@ -1,5 +1,5 @@
 // Offline support: network first, falling back to the cached copy. Only same-origin GET requests.
-const CACHE = 'nhip-v1';
+const CACHE = 'tracking-status-v2';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

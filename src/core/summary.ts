@@ -39,7 +39,7 @@ export interface SummaryInput {
 }
 
 export const REVIEW_PROMPT =
-  'Nhờ bạn đọc tóm tắt tuần học dưới đây và nhận xét ngắn: tuần này tôi giữ nhịp thế nào, vướng mắc nào nên gỡ trước, và bước cho tuần sau đã đủ nhỏ và cụ thể chưa.';
+  'Nhờ bạn đọc tóm tắt tuần học dưới đây và nhận xét ngắn: tuần này tôi học có đều không, vướng mắc nào nên gỡ trước, và bước cho tuần sau đã đủ nhỏ và cụ thể chưa.';
 
 export function buildWeekSummary(input: SummaryInput): WeekSummary {
   const from = mondayOf(input.weekStart);
@@ -119,11 +119,11 @@ function renderText(s: WeekSummary, input: SummaryInput): string {
       if (t.track.nextStep) lines.push(`- Bước nhỏ nhất khi quay lại: ${t.track.nextStep}`);
       continue;
     }
-    lines.push(`- Thời gian: ${fmtMinutes(t.minutes)}; ${t.full} phiên đầy đủ, ${t.tiny} bước nhỏ`);
+    lines.push(`- Thời gian: ${fmtMinutes(t.minutes)}; ${t.full} buổi học đầy đủ, ${t.tiny} bước nhỏ`);
     if (t.sprintLine) lines.push(`- ${t.sprintLine}`);
     if (t.milestones.length) lines.push(`- Mốc xong trong tuần: ${t.milestones.join('; ')}`);
     if (t.evidence.length) {
-      lines.push('- Bằng chứng:');
+      lines.push('- Thành quả:');
       t.evidence.forEach((e) => lines.push(`  - ${e}`));
     }
     if (t.blockers.length) {

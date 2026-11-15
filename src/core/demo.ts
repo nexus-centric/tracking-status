@@ -9,14 +9,14 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
   const ts = (n: number, h = 21) => `${d(n)}T${String(h).padStart(2, '0')}:00:00.000Z`;
 
   const devops: Track = {
-    id: 'demo-devops', name: 'DevOps: GitOps với Argo CD', color: '#2f6f62', demo: true,
+    id: 'demo-devops', name: 'DevOps: GitOps với Argo CD', color: '#2f5bea', demo: true,
     why: 'Muốn tự dựng được luồng GitOps hoàn chỉnh để áp dụng cho dự án ở công ty.',
     tinyAction: 'Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)',
     plan: 'Sau khi ăn tối xong, tôi mở laptop và làm bước nhỏ ngay tại bàn.',
     weeklyTarget: 5, restDays: [0], nextStep: '', pauses: [], archived: false, createdAt: d(-27),
   };
   const video: Track = {
-    id: 'demo-video', name: 'Dựng video ngắn', color: '#b5603c', demo: true,
+    id: 'demo-video', name: 'Dựng video ngắn', color: '#d9480f', demo: true,
     why: 'Tự dựng được video du lịch 60 giây mà không cần nhờ ai.',
     tinyAction: 'Mở project và cắt một đoạn 10 giây',
     plan: 'Tối thứ Bảy, sau khi dọn nhà, tôi ngồi dựng 30 phút.',
@@ -25,7 +25,7 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
     pauses: [{ from: d(-18), note: 'Dồn sức cho DevOps lab trong tháng này' }],
   };
   const reading: Track = {
-    id: 'demo-reading', name: 'Đọc: Designing Data-Intensive Applications', color: '#4c5c9c', demo: true,
+    id: 'demo-reading', name: 'Đọc: Designing Data-Intensive Applications', color: '#0e9f8f', demo: true,
     why: 'Hiểu nền tảng hệ thống dữ liệu để thiết kế tốt hơn.',
     tinyAction: 'Đọc hai trang và ghi một ý',
     plan: 'Khi lên giường, tôi đọc trước khi cầm điện thoại.',
@@ -36,7 +36,7 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
     {
       id: 'demo-s0', trackId: devops.id, title: 'Ôn Kubernetes cơ bản', deliverable: 'Ghi chú một trang về Pod, Deployment, Service kèm lệnh mẫu',
       start: d(-27), end: d(-14), status: 'done', closedOn: d(-13), demo: true,
-      reflection: 'Xong đúng hạn. Bước nhỏ 10 phút giúp giữ nhịp vào những ngày đi làm về muộn.',
+      reflection: 'Xong đúng hạn. Bước nhỏ 10 phút giúp tôi vẫn học đều vào những ngày đi làm về muộn.',
       milestones: [
         { id: 'demo-m01', text: 'Chạy được Pod và Deployment trên kind', done: true, doneOn: d(-24) },
         { id: 'demo-m02', text: 'Expose bằng Service và Ingress', done: true, doneOn: d(-19) },
@@ -59,7 +59,7 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
       start: d(-30), end: d(-3), status: 'active', demo: true,
       milestones: [
         { id: 'demo-m21', text: 'Chọn 20 clip và sắp timeline thô', done: true, doneOn: d(-26) },
-        { id: 'demo-m22', text: 'Cắt theo nhịp nhạc', done: true, doneOn: d(-21) },
+        { id: 'demo-m22', text: 'Cắt khớp theo nhạc', done: true, doneOn: d(-21) },
         { id: 'demo-m23', text: 'Chỉnh màu cơ bản', done: false },
         { id: 'demo-m24', text: 'Thêm chữ và âm thanh', done: false },
         { id: 'demo-m25', text: 'Xuất bản 1080p', done: false },
@@ -109,7 +109,7 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
   const vid: [number, 'tiny' | 'full', number, string][] = [
     [-46, 'full', 60, 'Làm quen giao diện, import clip'], [-44, 'full', 45, 'Học phím tắt cắt'], [-41, 'tiny', 10, 'Xem một video hướng dẫn'],
     [-39, 'full', 50, 'Dựng thử 15 giây'], [-36, 'full', 40, 'Chọn nhạc'], [-33, 'tiny', 10, 'Lọc clip'], [-30, 'full', 60, 'Lên kế hoạch video 60 giây'],
-    [-26, 'full', 70, 'Sắp timeline thô 20 clip'], [-24, 'tiny', 15, 'Đánh dấu beat nhạc'], [-21, 'full', 80, 'Cắt theo nhịp nhạc'], [-19, 'tiny', 10, 'Xem lại bản cắt'],
+    [-26, 'full', 70, 'Sắp timeline thô 20 clip'], [-24, 'tiny', 15, 'Đánh dấu beat nhạc'], [-21, 'full', 80, 'Cắt khớp theo nhạc'], [-19, 'tiny', 10, 'Xem lại bản cắt'],
   ];
   for (const [day, kind, min, note] of vid) log(video, day, kind, min, note);
   const vl = logs.find((l) => l.trackId === video.id && l.day === d(-21));

@@ -120,6 +120,9 @@ export function normSettings(v: unknown): Settings {
   return { busyPerMonth: num(o.busyPerMonth, 0, 10, DEFAULT_SETTINGS.busyPerMonth) };
 }
 
+/** Current backup schema version. Bump it, and migrate older versions in parseBundle, when the format changes. */
+export const BUNDLE_VERSION = 1;
+
 export interface ParseResult { bundle: Bundle; dropped: number }
 
 export function parseBundle(text: string): ParseResult {
@@ -130,7 +133,10 @@ export function parseBundle(text: string): ParseResult {
     throw new Error('File không phải JSON hợp lệ.');
   }
   const o = obj(raw);
-  if (o.app !== 'nhip') throw new Error('File này không phải bản sao lưu của Nhịp.');
+  if (o.app !== 'nhip') throw new Error('File này không phải bản sao lưu của Tiến độ học.');
+  const version = o.version === undefined ? 1 : o.version;
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) throw new Error('Bản sao lưu thiếu số phiên bản hợp lệ.');
+  if (version > BUNDLE_VERSION) throw new Error(`Bản sao lưu được tạo từ phiên bản mới hơn của app (định dạng ${version}). Hãy tải lại trang để cập nhật app rồi thử lại.`);
   let dropped = 0;
   const keep = <T>(list: unknown, f: (v: unknown) => T | null): T[] =>
     arr(list).flatMap((v) => {
@@ -157,4 +163,52 @@ export function parseBundle(text: string): ParseResult {
 
 export function makeBundle(data: Omit<Bundle, 'app' | 'version' | 'exportedAt'>): Bundle {
   return { app: 'nhip', version: 1, exportedAt: new Date().toISOString(), ...data };
+}
+
+type Data = Omit<Bundle, 'app' | 'version' | 'exportedAt'>;
+
+export interface BundleCounts { tracks: number; sprints: number; logs: number; marks: number; reviews: number; evidence: number; minutes: number }
+
+export function countBundle(d: Data): BundleCounts {
+  return {
+    tracks: d.tracks.length,
+    sprints: d.sprints.length,
+    logs: d.logs.length,
+    marks: d.marks.length,
+    reviews: d.reviews.length,
+    evidence: d.logs.reduce((a, l) => a + l.evidence.length, 0),
+    minutes: d.logs.reduce((a, l) => a + l.minutes, 0),
+  };
+}
+
+/**
+ * Merges a backup into the current data without deleting anything.
+ * Records are matched by id (reviews by week). When both sides have a record, the current one is kept,
+ * except week reviews, where the most recently edited one wins. A rest/busy mark from the file is skipped
+ * when the same track already has a mark on that day.
+ */
+export function mergeData(current: Data, incoming: Data): { data: Data; added: Omit<BundleCounts, 'evidence' | 'minutes'> } {
+  const addById = <T extends { id: string }>(cur: T[], inc: T[]): [T[], number] => {
+    const ids = new Set(cur.map((x) => x.id));
+    const extra = inc.filter((x) => !ids.has(x.id));
+    return [[...cur, ...extra], extra.length];
+  };
+  const [tracks, nt] = addById(current.tracks, incoming.tracks);
+  const [sprints, ns] = addById(current.sprints, incoming.sprints);
+  const [logs, nl] = addById(current.logs, incoming.logs);
+  const markKey = (m: DayMark) => `${m.trackId}|${m.day}`;
+  const markIds = new Set(current.marks.map((m) => m.id));
+  const markDays = new Set(current.marks.map(markKey));
+  const newMarks = incoming.marks.filter((m) => !markIds.has(m.id) && !markDays.has(markKey(m)));
+  const reviews = [...current.reviews];
+  let nr = 0;
+  for (const r of incoming.reviews) {
+    const i = reviews.findIndex((x) => x.weekStart === r.weekStart);
+    if (i < 0) { reviews.push(r); nr++; }
+    else if ((r.updatedAt || '') > (reviews[i].updatedAt || '')) reviews[i] = r;
+  }
+  return {
+    data: { tracks, sprints, logs, marks: [...current.marks, ...newMarks], reviews, settings: current.settings },
+    added: { tracks: nt, sprints: ns, logs: nl, marks: newMarks.length, reviews: nr },
+  };
 }

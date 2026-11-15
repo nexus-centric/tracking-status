@@ -2,7 +2,7 @@
 import { canUseBusy, makeCtx, type Ctx } from './core/rhythm.js';
 import { today } from './core/dates.js';
 import { demoBundle } from './core/demo.js';
-import { makeBundle, parseBundle } from './core/bundle.js';
+import { countBundle, makeBundle, mergeData, parseBundle } from './core/bundle.js';
 import type { Bundle, Day, DayMark, LogEntry, Settings, Sprint, Track, WeekReview } from './core/types.js';
 import { DEFAULT_SETTINGS } from './core/types.js';
 import * as db from './db.js';
@@ -94,13 +94,22 @@ export function exportBundle(): Bundle {
   return makeBundle({ tracks: state.tracks, sprints: state.sprints, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings });
 }
 
-export async function importText(text: string): Promise<{ tracks: number; logs: number; dropped: number }> {
-  const { bundle, dropped } = parseBundle(text);
-  const data: db.Data = { tracks: bundle.tracks, sprints: bundle.sprints, logs: bundle.logs, marks: bundle.marks, reviews: bundle.reviews, settings: bundle.settings };
+/** Replaces or merges the current data with a parsed backup. */
+export async function applyImport(bundle: Bundle, mode: 'merge' | 'replace'): Promise<{ tracks: number; logs: number; addedLogs: number }> {
+  const incoming: db.Data = { tracks: bundle.tracks, sprints: bundle.sprints, logs: bundle.logs, marks: bundle.marks, reviews: bundle.reviews, settings: bundle.settings };
+  const current: db.Data = { tracks: state.tracks, sprints: state.sprints, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings };
+  const data = mode === 'replace' ? incoming : mergeData(current, incoming).data;
+  const addedLogs = mode === 'replace' ? data.logs.length : data.logs.length - current.logs.length;
   await db.replaceAll(data);
   Object.assign(state, data);
   emit();
-  return { tracks: data.tracks.length, logs: data.logs.length, dropped };
+  return { tracks: data.tracks.length, logs: data.logs.length, addedLogs };
+}
+
+export function previewImport(text: string) {
+  const { bundle, dropped } = parseBundle(text);
+  const current: db.Data = { tracks: state.tracks, sprints: state.sprints, logs: state.logs, marks: state.marks, reviews: state.reviews, settings: state.settings };
+  return { bundle, dropped, file: countBundle(bundle), current: countBundle(current), merge: mergeData(current, bundle).added };
 }
 
 export async function loadDemo(): Promise<void> {

@@ -64,7 +64,7 @@ export function sprintProgress(s: Sprint, today: Day): SprintProgress {
 export const PACE_LABEL: Record<Pace, string> = {
   'not-started': 'chưa bắt đầu',
   ahead: 'nhanh hơn dự kiến',
-  'on-track': 'đúng nhịp',
+  'on-track': 'đúng tiến độ',
   behind: 'chậm hơn dự kiến',
   overdue: 'đã quá hạn',
   done: 'đã xong',
