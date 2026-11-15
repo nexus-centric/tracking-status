@@ -245,13 +245,242 @@ for (const width of [1280, 768, 390]) {
   await ctx.close();
 }
 
+
+// Roadmap: paste a syllabus, preview, one confirm creates the roadmap and its sprints; finish items over
+// several (simulated) days with the clock moved forward; then the overview with projection and the planner.
+// The outline below is a test fixture typed for this script, not data shipped with the app.
+const SYLLABUS = `# Phần 1: Nền tảng container
+- Bài 1: Container là gì (30m)
+- Bài 2: Viết Dockerfile đầu tiên (45m)
+- Bài 3: Image, layer và registry (45m)
+- Bài 4: Docker Compose cho môi trường dev (1h)
+- Thực hành: đóng gói một app Go [2]
+
+# Phần 2: Kubernetes cơ bản
+- Bài 5: Kiến trúc cluster (30m)
+- Bài 6: Pod và vòng đời (45m)
+- Bài 7: Deployment và ReplicaSet (45m)
+- Bài 8: Service và DNS trong cluster (45m)
+- Bài 9: ConfigMap và Secret (45m)
+- Bài 10: Probe và rolling update (1h)
+- Thực hành: deploy app lên k3d [2]
+
+# Phần 3: Mạng và lưu trữ
+- Bài 11: Ingress và TLS (1h)
+- Bài 12: NetworkPolicy (45m)
+- Bài 13: PersistentVolume và StorageClass (45m)
+- Bài 14: StatefulSet (45m)
+- Thực hành: Postgres trong cluster [2]
+
+# Phần 4: Vận hành
+- Bài 15: Helm chart (1h)
+- Bài 16: Kustomize overlay (45m)
+- Bài 17: GitOps với Argo CD (1h)
+- Bài 18: Giám sát với Prometheus (1h)
+- Bài 19: Log tập trung (45m)
+- Bài 20: RBAC và ServiceAccount (45m)
+- Bài 21: Autoscaling (45m)
+- Bài 22: Backup và khôi phục (45m)
+- Bài 23: Nâng cấp cluster (45m)
+- Dự án cuối: một app hoàn chỉnh trên GitOps [4]
+`;
+const idb = (page, stores) => page.evaluate((stores) => new Promise((res) => {
+  const r = indexedDB.open('nhip');
+  r.onsuccess = () => {
+    const db = r.result;
+    const tx = db.transaction(stores, 'readonly');
+    const out = { version: db.version, names: [...db.objectStoreNames] };
+    for (const s of stores) { const q = tx.objectStore(s).getAll(); q.onsuccess = () => { out[s] = q.result; }; }
+    tx.oncomplete = () => { db.close(); res(out); };
+  };
+}), stores);
+let roadmapBackup = null;
+{
+  const days = ['2026-10-26', '2026-10-28', '2026-10-30', '2026-11-02', '2026-11-04', '2026-11-06', '2026-11-09', '2026-11-11', '2026-11-13'];
+  const { ctx, page } = await session(1280, '2026-10-25');
+  // Minimal track: only a name.
+  await go(page, '#/new', '.track-form');
+  await page.fill('[name="name"]', 'Kubernetes từ đầu');
+  await page.click('.track-form button.primary');
+  await page.waitForSelector('.roadmap-card.empty-rm');
+  await page.click('.roadmap-card a.btn.primary');
+  await page.waitForSelector('.rm-import-form');
+  await page.fill('[name="src"]', SYLLABUS);
+  await page.waitForSelector('.pv-sum');
+  await page.waitForTimeout(250);
+  checks.importPreview = (await page.textContent('.pv-sum')).trim();
+  checks.importPlanSummary = (await page.textContent('.plan-sum')).replace(/\s+/g, ' ').trim();
+  checks.importButton = (await page.textContent('.rm-import-form button[type="submit"]')).trim();
+  await page.click('.rm-import-form button[type="submit"]');
+  await page.waitForSelector('.rm-overview');
+  let db = await idb(page, ['roadmap', 'sprints', 'tracks']);
+  checks.roadmapItems = db.roadmap.length;
+  checks.roadmapSprints = db.sprints.map((s) => [s.status, s.start, s.end, s.milestones.length]);
+  checks.milestonesLinked = db.sprints.every((s) => s.milestones.every((m) => db.roadmap.some((i) => i.id === m.itemId)));
+  const trackId = db.tracks[0].id;
+  // Day by day: finish the next item, sometimes from the roadmap page, sometimes from the sprint milestone.
+  for (const [k, d] of days.entries()) {
+    await page.clock.setFixedTime(new Date(`${d}T20:00:00+07:00`));
+    if (k % 3 === 2) {
+      await go(page, `#/t/${trackId}`, '.sprint');
+      await page.locator('.sprint .milestones input[type="checkbox"]:not(:checked)').first().check();
+      await page.waitForTimeout(250);
+      await page.click('.track-head [data-act="log"]');
+      await page.waitForSelector('dialog.modal .log-form');
+      await page.fill('dialog [name="minutes"]', '45');
+      await page.click('dialog.modal button[type="submit"]');
+      await page.waitForSelector('dialog.modal', { state: 'detached' });
+    } else {
+      await go(page, `#/t/${trackId}/roadmap`, '.ri-list');
+      await page.locator('.ri input[data-act="ri-done"]:not(:checked)').first().check();
+      await page.waitForSelector('.toast .link-btn');
+      if (k === 0) checks.itemToast = (await page.textContent('.toast span')).trim();
+      await page.click('.toast .link-btn');
+      await page.waitForSelector('dialog.modal .log-form');
+      await page.click('dialog.modal button[type="submit"]');
+      await page.waitForSelector('dialog.modal', { state: 'detached' });
+    }
+  }
+  db = await idb(page, ['roadmap', 'sprints', 'logs']);
+  checks.itemsDone = db.roadmap.filter((i) => i.done).map((i) => i.doneOn);
+  checks.syncMilestoneToItem = db.sprints.flatMap((s) => s.milestones).filter((m) => m.done).every((m) => db.roadmap.find((i) => i.id === m.itemId)?.done);
+  checks.syncItemToMilestone = db.roadmap.filter((i) => i.done).every((i) => db.sprints.some((s) => s.milestones.some((m) => m.itemId === i.id && m.done)));
+  checks.logs = db.logs.length;
+  // Reorder and edit.
+  await page.clock.setFixedTime(new Date('2026-11-15T20:00:00+07:00'));
+  await go(page, `#/t/${trackId}/roadmap`, '.ri-list');
+  const lastTitle = await page.locator('.ri .ri-title').last().textContent();
+  await page.locator('.ri [data-act="ri-up"]').last().click();
+  await page.waitForTimeout(250);
+  checks.reorder = (await page.locator('.ri .ri-title').nth(-2).textContent()) === lastTitle;
+  await page.locator('.ri [data-act="ri-down"]').nth(-2).click();
+  await page.waitForTimeout(250);
+  checks.reorderRestored = (await page.locator('.ri .ri-title').last().textContent()) === lastTitle;
+  await page.fill('.ri-add [name="title"]', 'Ôn tập toàn khoá (1h)');
+  await page.click('.ri-add button');
+  await page.waitForTimeout(250);
+  checks.addedItemEstimate = (await page.locator('.ri').last().textContent()).replace(/\s+/g, ' ').includes('1 giờ');
+  await page.locator('.ri [data-act="ri-edit"]').last().click();
+  await page.waitForSelector('dialog .ri-form');
+  await page.fill('dialog [name="title"]', 'Ôn tập và tự kiểm tra');
+  await page.click('dialog button[type="submit"]');
+  await page.waitForSelector('dialog.modal', { state: 'detached' });
+  await page.locator('.ri [data-act="ri-del"]').last().click();
+  await page.waitForTimeout(250);
+  checks.afterAddEditDelete = await page.locator('.ri').count();
+  // Overview, track page, planner.
+  checks.projection = (await page.locator('.rm-overview .proj li').allTextContents()).map((s) => s.replace(/\s+/g, ' ').trim());
+  checks.replanBanner = await page.locator('.rm-overview .banner.replan').count() ? (await page.textContent('.rm-overview .banner.replan span')).trim() : null;
+  await page.click('.assume summary');
+  await shot(page, 'roadmap-overview-1280');
+  await go(page, `#/t/${trackId}`, '.roadmap-card');
+  await shot(page, 'roadmap-track-1280');
+  await go(page, `#/t/${trackId}/plan`, '.plan-sprints');
+  checks.planCloseActiveDefault = await page.isChecked('[name="closeActive"]');
+  checks.planSprintsProposed = await page.locator('.plan-sprints > li').count();
+  await page.click('.plan-sprints > li:first-child [data-push]');
+  await page.waitForTimeout(150);
+  checks.planFoot = (await page.textContent('.plan-foot p')).replace(/\s+/g, ' ').trim();
+  await shot(page, 'plan-sprints-1280');
+  await page.click('[data-create]');
+  await page.waitForSelector('.track-head');
+  db = await idb(page, ['sprints']);
+  checks.afterReplan = db.sprints.map((s) => [s.status, s.start, s.end, s.milestones.length]);
+  // Import page on an existing roadmap for the screenshot at the same width.
+  await go(page, `#/t/${trackId}/roadmap/import`, '.rm-import-form');
+  await page.fill('[name="src"]', SYLLABUS.split('\n').slice(0, 14).join('\n'));
+  await page.waitForSelector('.pv-sum');
+  await page.waitForTimeout(250);
+  await shot(page, 'roadmap-import-1280');
+  // Export (format 2) for the narrow screenshots and the import check.
+  await go(page, '#/settings', 'h1');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="export"]')]);
+  checks.exportFileName = dl.suggestedFilename();
+  mkdirSync('tmp', { recursive: true });
+  roadmapBackup = 'tmp/roadmap-export.json';
+  await dl.saveAs(roadmapBackup);
+  const ex = JSON.parse(readFileSync(roadmapBackup, 'utf8'));
+  checks.exportVersion = ex.version;
+  checks.exportRoadmap = ex.roadmap.length;
+  await ctx.close();
+}
+{
+  const { ctx, page } = await session(390, '2026-11-15');
+  await go(page, '#/settings', 'h1');
+  await page.setInputFiles('[data-act="import"]', roadmapBackup);
+  await page.waitForSelector('dialog.modal .import-table');
+  checks.importPreviewRoadmapRow = (await page.locator('.import-table tbody tr', { hasText: 'Mục lộ trình' }).textContent()).replace(/\s+/g, ' ').trim();
+  await page.click('dialog.modal button[type="submit"]');
+  await page.waitForSelector('.toast');
+  checks.importToastRoadmap = await page.textContent('.toast span');
+  const db = await idb(page, ['tracks']);
+  const trackId = db.tracks[0].id;
+  await go(page, `#/t/${trackId}/roadmap`, '.rm-overview');
+  await shot(page, 'roadmap-overview-390');
+  await go(page, `#/t/${trackId}/plan`, '.plan-sprints');
+  await shot(page, 'plan-sprints-390');
+  await go(page, `#/t/${trackId}/roadmap/import`, '.rm-import-form');
+  await page.fill('[name="src"]', SYLLABUS.split('\n').slice(0, 14).join('\n'));
+  await page.waitForSelector('.pv-sum');
+  await page.waitForTimeout(250);
+  await shot(page, 'roadmap-import-390');
+  // Quick path: paste the outline while creating a track; one submit creates roadmap and sprints.
+  await go(page, '#/new', '.track-form');
+  await page.fill('[name="name"]', 'Sách Designing Data-Intensive Applications');
+  await page.fill('[name="roadmap"]', '1. Chương 1\n2. Chương 2\n3. Chương 3\n4. Chương 4\n5. Chương 5\n6. Chương 6\n7. Chương 7\n8. Chương 8\n9. Chương 9\n10. Chương 10\n11. Chương 11\n12. Chương 12');
+  await page.waitForTimeout(150);
+  checks.quickPathSummary = (await page.textContent('.rm-quick-sum')).trim();
+  checks.quickPathSprintHidden = await page.locator('.first-sprint').isHidden();
+  await page.click('.track-form button.primary');
+  await page.waitForSelector('.roadmap-card:not(.empty-rm)');
+  checks.quickPathToast = await page.textContent('.toast span');
+  await ctx.close();
+}
+
+// Migration: a database created by the previous version (IndexedDB v1, no roadmap store) opens with data intact.
+{
+  const { ctx, page } = await session(1280, '2026-11-15');
+  // A blank same-origin page to create the old database before the app ever runs (no favicon request noise).
+  await page.route('**/blank-for-migration', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><link rel="icon" href="data:,"><title>x</title>' }));
+  await page.goto(BASE + 'blank-for-migration');
+  await page.evaluate(() => new Promise((res) => {
+    const r = indexedDB.open('nhip', 1);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      for (const s of ['tracks', 'sprints', 'logs', 'marks']) db.createObjectStore(s, { keyPath: 'id' });
+      db.createObjectStore('reviews', { keyPath: 'weekStart' });
+      db.createObjectStore('settings');
+    };
+    r.onsuccess = () => {
+      const db = r.result;
+      const tx = db.transaction(['tracks', 'sprints', 'logs'], 'readwrite');
+      tx.objectStore('tracks').put({ id: 'old', name: 'Việc học cũ', color: '#2f5bea', why: '', tinyAction: 'Đọc 10 phút', plan: '', weeklyTarget: 4, restDays: [], nextStep: '', pauses: [], archived: false, createdAt: '2026-11-01' });
+      tx.objectStore('sprints').put({ id: 'olds', trackId: 'old', title: 'Đợt cũ', deliverable: '', start: '2026-11-03', end: '2026-11-23', status: 'active', milestones: [{ id: 'm', text: 'Mốc cũ', done: false }] });
+      tx.objectStore('logs').put({ id: 'oldl', trackId: 'old', day: '2026-11-10', kind: 'full', minutes: 30, note: '', blocker: '', evidence: [], createdAt: '2026-11-10T12:00:00Z' });
+      tx.oncomplete = () => { db.close(); res(); };
+    };
+  }));
+  await page.goto(BASE + '#/t/old');
+  await page.waitForSelector('.track-head');
+  const db = await idb(page, ['tracks', 'sprints', 'logs', 'roadmap']);
+  checks.migration = { version: db.version, hasRoadmapStore: db.names.includes('roadmap'), tracks: db.tracks.length, sprints: db.sprints.length, logs: db.logs.length, roadmap: db.roadmap.length, oldSprintVisible: (await page.textContent('.sprint h2')).trim() };
+  if (db.version !== 2 || !db.names.includes('roadmap') || db.tracks.length !== 1 || db.logs.length !== 1) problems.push(`migration: ${JSON.stringify(checks.migration)}`);
+  await ctx.close();
+}
+
 // Overflow audit: no horizontal scroll at common widths on every main screen.
 {
   const { ctx, page } = await session(1280);
   await go(page, '', '.empty');
   await page.click('[data-act="load-demo"]');
   await page.waitForSelector('.card.track');
-  const routes = ['', '#/timer', '#/t/demo-devops', '#/week', '#/evidence', '#/settings', '#/new'];
+  await go(page, '#/t/demo-devops/roadmap/import', '.rm-import-form');
+  await page.fill('[name="src"]', SYLLABUS);
+  await page.waitForSelector('.pv-sum');
+  await page.waitForTimeout(250);
+  await page.click('.rm-import-form button[type="submit"]');
+  await page.waitForSelector('.rm-overview');
+  const routes = ['', '#/timer', '#/t/demo-devops', '#/t/demo-devops/roadmap', '#/t/demo-devops/plan', '#/t/demo-devops/roadmap/import', '#/week', '#/evidence', '#/settings', '#/new'];
   const overflow = [];
   for (const w of [360, 390, 768, 1024, 1280, 1440]) {
     await page.setViewportSize({ width: w, height: 900 });
