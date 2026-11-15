@@ -1,13 +1,13 @@
-Nhờ bạn đọc tóm tắt tuần học dưới đây và nhận xét ngắn: tuần này tôi giữ nhịp thế nào, vướng mắc nào nên gỡ trước, và bước cho tuần sau đã đủ nhỏ và cụ thể chưa.
+Nhờ bạn đọc tóm tắt tuần học dưới đây và nhận xét ngắn: tuần này tôi học có đều không, vướng mắc nào nên gỡ trước, và bước cho tuần sau đã đủ nhỏ và cụ thể chưa.
 
 Tóm tắt tuần 9/11 - 15/11/2026
 Tổng: 6 ngày có học, 4 giờ 35 phút.
 
 ## DevOps: GitOps với Argo CD: 6/5 ngày mục tiêu, đạt
-- Thời gian: 3 giờ 25 phút; 4 phiên đầy đủ, 3 bước nhỏ
-- Đợt "GitOps với Argo CD": 3/5 mốc, còn 9 ngày, đúng nhịp
+- Thời gian: 3 giờ 25 phút; 4 buổi học đầy đủ, 3 bước nhỏ
+- Đợt "GitOps với Argo CD": 3/5 mốc, còn 9 ngày, đúng tiến độ
 - Mốc xong trong tuần: Cài Argo CD và vào được UI; Sync app mẫu từ repo Git
-- Bằng chứng:
+- Thành quả:
   - 9/11: Getting started - https://argo-cd.readthedocs.io/en/stable/getting_started/
   - 11/11: Commit khởi tạo repo (ví dụ) - https://example.com/gitops-demo/commit/1a2b3c4
   - 13/11: Argo CD báo Synced/Healthy cho app guestbook sau khi sửa path trong Application.
@@ -23,10 +23,10 @@ Tổng: 6 ngày có học, 4 giờ 35 phút.
 - Bước nhỏ nhất khi quay lại: Mở project, cắt lại 10 giây đầu của video du lịch
 
 ## Đọc: Designing Data-Intensive Applications: 3/3 ngày mục tiêu, đạt
-- Thời gian: 1 giờ 10 phút; 2 phiên đầy đủ, 1 bước nhỏ
+- Thời gian: 1 giờ 10 phút; 2 buổi học đầy đủ, 1 bước nhỏ
 - Đợt "Phần I: Foundations of Data Systems": 2/4 mốc, còn 7 ngày, chậm hơn dự kiến
 - Mốc xong trong tuần: Chương 2: Data Models
-- Bằng chứng:
+- Thành quả:
   - 10/11: Tóm tắt chương 2: khi nào chọn document model, khi nào relational.
 - Bước tiếp theo: Chương 3: Storage and Retrieval
 

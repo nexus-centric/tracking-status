@@ -1,7 +1,8 @@
-// End-to-end smoke test and screenshots at 1280, 768 and 390 px. Requires `npm run build` first.
+// End-to-end smoke test, screenshots at 1280, 768 and 390 px, and overflow checks at 360-1440 px.
+// Requires `npm run build` first. The vite preview server is always killed on exit.
 // Uses an installed Chrome/Chromium (CHROME_PATH, default /usr/bin/google-chrome) via playwright-core.
 // Still frames use prefers-reduced-motion so captures are not mid-animation.
-// A short tap-to-log clip is recorded with motion enabled.
+// A short clip of the flow effects and the running timer is recorded with motion enabled.
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, unlinkSync } from 'node:fs';
@@ -132,6 +133,39 @@ for (const width of [1280, 768, 390]) {
   await page.click('[data-tpl="devops"]');
   await shot(page, `new-track-${width}`);
 
+  // Timer: idle setup, a running Pomodoro 11 minutes in (simulated by moving the stored
+  // wall-clock start back, then reloading, which also proves reload survival), the save sheet.
+  await go(page, '#/timer', '.tm-face');
+  await shot(page, `timer-idle-${width}`);
+  await page.check('[name="tm-mode"][value="pomodoro"]', { force: true });
+  await page.click('[data-tm="start"]');
+  await page.waitForSelector('.tm-info');
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('nhip:timer'));
+    const back = 11 * 60_000 + 23_000;
+    s.startedAt -= back; s.runStart -= back;
+    localStorage.setItem('nhip:timer', JSON.stringify(s));
+  });
+  await page.reload();
+  await page.waitForSelector('.tm-info');
+  await page.waitForTimeout(1200);
+  checks[`timerAfterReload-${width}`] = (await page.textContent('.tm-time')).trim();
+  await shot(page, `timer-running-${width}`);
+  await go(page, '', '.session-strip.live');
+  checks[`dockVisible-${width}`] = await page.locator('.timer-dock').isVisible();
+  await go(page, '#/timer', '.tm-info');
+  await page.click('[data-tm="stop"]');
+  await page.waitForSelector('dialog.modal .quick-form');
+  checks[`timerSaveMinutes-${width}`] = await page.inputValue('dialog [name="minutes"]');
+  await page.screenshot({ path: `${OUT}/timer-save-${width}.png` });
+  const logsBefore = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open('nhip'); r.onsuccess = () => { const q = r.result.transaction('logs').objectStore('logs').count(); q.onsuccess = () => res(q.result); }; }));
+  await page.click('dialog.modal button[type="submit"]');
+  await page.waitForSelector('dialog.modal', { state: 'detached' });
+  await page.waitForTimeout(300);
+  const logsAfter = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open('nhip'); r.onsuccess = () => { const q = r.result.transaction('logs').objectStore('logs').count(); q.onsuccess = () => res(q.result); }; }));
+  checks[`timerSavedLog-${width}`] = logsAfter === logsBefore + 1;
+  checks[`timerCleared-${width}`] = await page.evaluate(() => localStorage.getItem('nhip:timer') === null);
+
   if (width === 1280) {
     // Export, then import into a fresh profile and compare.
     await go(page, '#/settings', 'h1');
@@ -142,8 +176,11 @@ for (const width of [1280, 768, 390]) {
     const exported = JSON.parse(readFileSync(path, 'utf8'));
     const fresh = await session(1280);
     await go(fresh.page, '#/settings', 'h1');
-    fresh.page.on('dialog', (d) => d.accept());
     await fresh.page.setInputFiles('[data-act="import"]', path);
+    await fresh.page.waitForSelector('dialog.modal .import-table');
+    checks.importPreviewRows = (await fresh.page.locator('.import-table tbody tr').allTextContents()).map((s) => s.replace(/\s+/g, ' ').trim());
+    await fresh.page.screenshot({ path: `${OUT}/import-preview-1280.png` });
+    await fresh.page.click('dialog.modal button[type="submit"]');
     await fresh.page.waitForSelector('.toast');
     checks.importToast = await fresh.page.textContent('.toast span');
     const counts = await fresh.page.evaluate(() => new Promise((res) => {
@@ -173,7 +210,7 @@ for (const width of [1280, 768, 390]) {
   // Schedule a return for the paused track on next Monday.
   await page.click('.card.paused [data-act="resume-on"]');
   await page.waitForTimeout(300);
-  checks.scheduledReturn = (await page.textContent('.card.paused')).includes('Đã hẹn quay lại');
+  checks.scheduledReturn = (await page.textContent('.card.paused')).includes('hẹn quay lại');
 
   // Pause a track with a next step, then resume it.
   await go(page, '#/t/demo-reading', '.track-head');
@@ -208,51 +245,82 @@ for (const width of [1280, 768, 390]) {
   await ctx.close();
 }
 
-// Motion clip: mid-week recover state, tap "Xong bước nhỏ", stitched with system ffmpeg.
+// Overflow audit: no horizontal scroll at common widths on every main screen.
+{
+  const { ctx, page } = await session(1280);
+  await go(page, '', '.empty');
+  await page.click('[data-act="load-demo"]');
+  await page.waitForSelector('.card.track');
+  const routes = ['', '#/timer', '#/t/demo-devops', '#/week', '#/evidence', '#/settings', '#/new'];
+  const overflow = [];
+  for (const w of [360, 390, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    for (const r of routes) {
+      await page.goto(BASE + r);
+      await page.waitForSelector('.main > *');
+      await page.waitForTimeout(120);
+      const o = await page.evaluate(() => {
+        const vw = document.documentElement.clientWidth;
+        const wide = [...document.querySelectorAll('.main *')].filter((el) => {
+          const b = el.getBoundingClientRect();
+          return b.width > 0 && b.right > vw + 1 && !el.closest('.heat-wrap, .hero-flow');
+        }).slice(0, 3).map((el) => el.className || el.tagName);
+        return { sw: document.documentElement.scrollWidth, vw, wide };
+      });
+      if (o.sw > o.vw || o.wide.length) overflow.push({ w, route: r || '#/', ...o });
+    }
+    if (w === 1440) { await page.goto(BASE); await page.waitForSelector('.card.track'); await shot(page, 'today-1440'); }
+    if (w === 360) { await page.goto(BASE); await page.waitForSelector('.card.track'); await shot(page, 'today-360'); }
+  }
+  checks.overflow = overflow;
+  if (overflow.length) problems.push(`overflow: ${JSON.stringify(overflow)}`);
+  await ctx.close();
+}
+
+// Motion clip: flowing chain, week bar and header lines on Today, then the running timer ring.
 {
   const dir = 'tmp/frames';
   mkdirSync(dir, { recursive: true });
   for (const f of readdirSync(dir)) if (f.endsWith('.png')) unlinkSync(join(dir, f));
-  const { ctx, page } = await session(390, '2026-11-18', { motion: true, deviceScaleFactor: 1 });
+  const { ctx, page } = await session(390, null, { motion: true, deviceScaleFactor: 1 });
   await go(page, '', '.empty');
   await page.click('[data-act="load-demo"]');
-  await page.waitForSelector('.card.track [data-act="tiny"]');
-  await page.waitForTimeout(500);
+  await page.waitForSelector('.card.track');
   await page.evaluate(() => document.querySelectorAll('.toast').forEach((el) => el.remove()));
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(600);
   let n = 0;
   const frame = async () => {
-    const path = join(dir, `f${String(n).padStart(3, '0')}.png`);
-    await page.screenshot({ path, animations: 'allow' });
+    await page.screenshot({ path: join(dir, `f${String(n).padStart(3, '0')}.png`), animations: 'allow' });
     n += 1;
   };
-  for (let i = 0; i < 4; i++) { await frame(); await page.waitForTimeout(80); }
-  const clicked = page.locator('.card.track [data-act="tiny"]').first().click();
-  const endAt = Date.now() + 1800;
-  await clicked;
-  while (Date.now() < endAt) {
-    await frame();
-    await page.waitForTimeout(70);
-  }
+  await page.evaluate(() => window.scrollTo(0, 120));
+  for (let i = 0; i < 26; i++) { await frame(); await page.waitForTimeout(60); }
+  await page.locator('.card.track [data-tm="quick-start"]').first().click();
+  await page.waitForSelector('.tm-info');
+  await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('nhip:timer'));
+    const back = 9 * 60_000;
+    s.startedAt -= back; s.runStart -= back;
+    localStorage.setItem('nhip:timer', JSON.stringify(s));
+  });
+  await page.reload();
+  await page.waitForSelector('.tm-info');
+  await page.waitForTimeout(400);
+  for (let i = 0; i < 30; i++) { await frame(); await page.waitForTimeout(60); }
   await ctx.close();
-  const webm = join(OUT, 'tap-to-log.webm');
-  const gif = join(OUT, 'tap-to-log.gif');
+  for (const old of ['tap-to-log.gif', 'tap-to-log.webm']) if (existsSync(join(OUT, old))) unlinkSync(join(OUT, old));
+  const gif = join(OUT, 'flow-and-timer.gif');
   try {
     execFileSync('ffmpeg', [
-      '-y', '-framerate', '12', '-i', join(dir, 'f%03d.png'),
-      '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-crf', '36', '-b:v', '0',
-      webm,
-    ], { stdio: 'ignore' });
-    execFileSync('ffmpeg', [
-      '-y', '-framerate', '12', '-i', join(dir, 'f%03d.png'),
-      '-vf', 'fps=12,scale=390:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=64[p];[s1][p]paletteuse=dither=bayer',
+      '-y', '-framerate', '10', '-i', join(dir, 'f%03d.png'),
+      '-vf', 'fps=10,scale=390:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=96[p];[s1][p]paletteuse=dither=bayer',
       '-loop', '0', gif,
     ], { stdio: 'ignore' });
-    checks.tapToLogClip = existsSync(webm) && existsSync(gif);
-    checks.tapToLogFrames = n;
+    checks.flowClip = existsSync(gif);
+    checks.flowClipFrames = n;
   } catch (err) {
     problems.push(`ffmpeg clip: ${(err && err.message) || err}`);
-    checks.tapToLogClip = false;
+    checks.flowClip = false;
   }
 }
 

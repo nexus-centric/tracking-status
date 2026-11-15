@@ -1,35 +1,57 @@
 {
   "checks": {
-    "tinyToast-1280": "Đã ghi bước nhỏ hôm nay.",
+    "tinyToast-1280": "Đã ghi bước nhỏ của hôm nay.",
     "trackStats-1280": [
-      "67Nhịp Điểm nhịp",
-      "6/77 ngày qua",
-      "4Tuần đạt liên tiếp",
-      "12 giờ 10 phút23 buổi đã ghi"
+      "67điểm Độ đều đặn",
+      "6/7Số ngày học trong 7 ngày qua",
+      "4Số tuần liên tiếp đạt mục tiêu",
+      "12 giờ 10 phútTổng thời gian, 23 buổi học"
     ],
     "clipboardHasSummary-1280": true,
-    "importToast": "Đã khôi phục 3 việc học, 44 buổi.",
+    "timerAfterReload-1280": "13:35",
+    "dockVisible-1280": true,
+    "timerSaveMinutes-1280": "11",
+    "timerSavedLog-1280": true,
+    "timerCleared-1280": true,
+    "importPreviewRows": [
+      "Việc học30+3",
+      "Đợt học40+4",
+      "Buổi học450+45",
+      "Ngày nghỉ, ngày bận10+1",
+      "Nhận xét tuần10+1"
+    ],
+    "importToast": "Đã gộp xong, thêm 45 buổi học.",
     "roundTrip": true,
-    "tinyToast-768": "Đã ghi bước nhỏ hôm nay.",
+    "tinyToast-768": "Đã ghi bước nhỏ của hôm nay.",
     "trackStats-768": [
-      "67Nhịp Điểm nhịp",
-      "6/77 ngày qua",
-      "4Tuần đạt liên tiếp",
-      "12 giờ 10 phút23 buổi đã ghi"
+      "67điểm Độ đều đặn",
+      "6/7Số ngày học trong 7 ngày qua",
+      "4Số tuần liên tiếp đạt mục tiêu",
+      "12 giờ 10 phútTổng thời gian, 23 buổi học"
     ],
     "clipboardHasSummary-768": true,
-    "tinyToast-390": "Đã ghi bước nhỏ hôm nay.",
+    "timerAfterReload-768": "13:35",
+    "dockVisible-768": true,
+    "timerSaveMinutes-768": "11",
+    "timerSavedLog-768": true,
+    "timerCleared-768": true,
+    "tinyToast-390": "Đã ghi bước nhỏ của hôm nay.",
     "trackStats-390": [
-      "67Nhịp Điểm nhịp",
-      "6/77 ngày qua",
-      "4Tuần đạt liên tiếp",
-      "12 giờ 10 phút23 buổi đã ghi"
+      "67điểm Độ đều đặn",
+      "6/7Số ngày học trong 7 ngày qua",
+      "4Số tuần liên tiếp đạt mục tiêu",
+      "12 giờ 10 phútTổng thời gian, 23 buổi học"
     ],
     "clipboardHasSummary-390": true,
+    "timerAfterReload-390": "13:35",
+    "dockVisible-390": true,
+    "timerSaveMinutes-390": "11",
+    "timerSavedLog-390": true,
+    "timerCleared-390": true,
     "midweekStates": [
-      "Hôm qua lỡ một ngày. Một bước nhỏ hôm nay là đủ để không lỡ hai ngày liền: Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)",
-      "Hôm nay đã ghi 30 phút: SSTables và LSM-tree",
-      "Khi quay lại, bước nhỏ nhất là: Mở project, cắt lại 10 giây đầu của video du lịch"
+      "Hôm qua bạn chưa học. Chỉ cần một bước nhỏ hôm nay là chuỗi ngày học vẫn liền mạch: Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)",
+      "Hôm nay bạn đã ghi 30 phút: SSTables và LSM-tree",
+      "Khi quay lại, bước nhỏ nhất để bắt đầu là: Mở project, cắt lại 10 giây đầu của video du lịch"
     ],
     "scheduledReturn": true,
     "pausedCards": [
@@ -39,8 +61,9 @@
     "resumedActive": true,
     "newSprint": "Phần II: Distributed Data",
     "milestonesAfterAdd": 3,
-    "tapToLogClip": true,
-    "tapToLogFrames": 19
+    "overflow": [],
+    "flowClip": true,
+    "flowClipFrames": 56
   },
   "problems": []
 }
