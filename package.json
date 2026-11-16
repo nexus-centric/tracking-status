@@ -16,7 +16,7 @@
     "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "playwright-core": "1.65.1",
     "typescript": "7.0.2",
     "vite": "8.3.8"
