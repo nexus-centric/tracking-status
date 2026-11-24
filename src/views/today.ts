@@ -134,11 +134,11 @@ function card(t: Track, index = 0): string {
         ? `<div class="sprint-mini">
         <div class="row between"><a href="#/t/${t.id}" class="sprint-title">${esc(s.title)}</a><span class="small">${sprintMeta(s, ctx.today)}</span></div>
         ${sprintBar(s, ctx.today)}
-        ${p.next ? `<label class="next-ms"><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${p.next.id}"> <span>Milestone tiếp theo: ${esc(p.next.text)}</span></label>` : `<p class="small muted">Bạn đã xong mọi milestone của sprint này. <a href="#/t/${t.id}">Kết thúc sprint</a></p>`}
+        ${p.next ? `<label class="next-ms"><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${p.next.id}"> <span>Milestone tiếp theo: ${esc(p.next.text)}</span></label>` : `<p class="small muted">Bạn đã xong mọi milestone của sprint này. <a class="btn xs" href="#/t/${t.id}">Kết thúc sprint</a></p>`}
       </div>`
         : state.sprints.some((x) => x.trackId === t.id && x.status === 'planned')
-          ? `<p class="small muted">Sprint kế tiếp trong kế hoạch đang chờ. <a href="#/t/${t.id}">Bắt đầu sprint</a></p>`
-          : `<p class="small muted">Topic này chưa có sprint. <a href="#/t/${t.id}?new-sprint=1">Đặt một sprint 2 đến 4 tuần</a> để có đích đến cụ thể.</p>`
+          ? `<p class="small muted">Sprint kế tiếp trong kế hoạch đang chờ. <a class="btn xs" href="#/t/${t.id}">Bắt đầu sprint</a></p>`
+          : `<p class="small muted">Topic này chưa có sprint, đặt một sprint 2 đến 4 tuần để có đích đến cụ thể. <a class="btn xs" href="#/t/${t.id}?new-sprint=1">Đặt sprint</a></p>`
     }
     ${roadmapMini(t)}
     ${t.plan ? `<p class="plan small">${esc(t.plan)}</p>` : ''}

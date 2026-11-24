@@ -376,14 +376,22 @@ let roadmapBackup = null;
   await go(page, `#/t/${trackId}`, '.roadmap-card');
   await shot(page, 'roadmap-track-1280');
   await go(page, `#/t/${trackId}/plan`, '.plan-sprints');
-  checks.planCloseActiveDefault = await page.isChecked('[name="closeActive"]');
+  checks.planSprintsLoaded = await page.locator('.plan-sprints > li').count();
+  page.once('dialog', (dlg) => dlg.accept());
+  await page.click('[data-preset="w3"]');
   checks.planSprintsProposed = await page.locator('.plan-sprints > li').count();
-  await page.click('.plan-sprints > li:first-child [data-push]');
+  // Free-form edit: move the first item of sprint 1 into a new sprint at the end.
+  await page.click('.plan-sprints > li:first-child details summary');
+  await page.locator('.plan-sprints > li:first-child [data-sel]').first().check();
+  await page.selectOption('[data-target]', 'new');
+  await page.click('[data-move]');
   await page.waitForTimeout(150);
   checks.planFoot = (await page.textContent('.plan-foot p')).replace(/\s+/g, ' ').trim();
   await shot(page, 'plan-sprints-1280');
-  await page.click('[data-create]');
+  page.once('dialog', (dlg) => dlg.accept()); // confirms the change to the running sprint
+  await page.click('[data-save]');
   await page.waitForSelector('.track-head');
+  page.removeAllListeners('dialog');
   db = await idb(page, ['sprints']);
   checks.afterReplan = db.sprints.map((s) => [s.status, s.start, s.end, s.milestones.length]);
   // Import page on an existing roadmap for the screenshot at the same width.

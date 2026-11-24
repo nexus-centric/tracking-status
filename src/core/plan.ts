@@ -10,13 +10,25 @@ export const MAX_WEEKS = SPRINT_MAX_DAYS / 7; // 4
 export const MAX_PLANNED_SPRINTS = 26;
 
 export interface DraftSprint {
-  weeks: number; // 2..4
+  weeks: number; // 2..4 from the presets; 1..8 when the user sets it
   itemIds: string[];
   title?: string; // user override
+  key?: string; // stable identity in the editor (the sprint id for an existing sprint)
+  sprintId?: string; // existing sprint this draft edits
+  start?: Day; // explicit first day; otherwise the day after the previous sprint
+  days?: number; // exact length in days (kept from an existing sprint); overrides weeks
 }
+
+/** Range of a sprint length the user can set by hand. The 2-4 week advice stays a soft warning. */
+export const EDIT_MIN_WEEKS = 1;
+export const EDIT_MAX_WEEKS = 8;
 
 export interface LaidOutSprint {
   index: number;
+  key?: string;
+  sprintId?: string;
+  autoTitle: boolean; // title comes from the items (no user override)
+  overlap: boolean; // starts before the previous sprint ends
   title: string;
   deliverable: string;
   start: Day;
@@ -42,6 +54,7 @@ export function weeklyCapacity(t: Pick<Track, 'weeklyTarget' | 'restDays'>): num
 }
 
 const clampWeeks = (w: number) => Math.max(MIN_WEEKS, Math.min(MAX_WEEKS, Math.round(w)));
+const clampEditWeeks = (w: number) => Math.max(EDIT_MIN_WEEKS, Math.min(EDIT_MAX_WEEKS, Math.round(w) || EDIT_MIN_WEEKS));
 
 /**
  * Greedy split: fill each sprint in roadmap order up to its capacity (weeks x sessions per week).
@@ -81,43 +94,56 @@ export function proposePlan(items: RoadmapItem[], track: Track, weeks = 3): Draf
   return out.map(({ weeks: wk, itemIds }) => ({ weeks: wk, itemIds }));
 }
 
-function autoTitle(items: RoadmapItem[], n: number): string {
+export function autoTitle(items: RoadmapItem[], n: number): string {
   const phases = [...new Set(items.map((i) => i.phase).filter((x): x is string => !!x))];
   if (phases.length === 1) return phases[0].slice(0, 200);
   if (phases.length > 1) return `${phases[0]} → ${phases[phases.length - 1]}`.slice(0, 200);
   return `Sprint ${n}`;
 }
 
-function autoDeliverable(items: RoadmapItem[]): string {
+export function autoDeliverable(items: RoadmapItem[]): string {
   if (!items.length) return '';
   if (items.length === 1) return `Hoàn thành: ${items[0].title}`.slice(0, 500);
   return `Hoàn thành ${items.length} mục, từ "${items[0].title}" đến "${items[items.length - 1].title}"`.slice(0, 500);
 }
 
-/** Turns drafts into dated sprints back to back from `start`, with effort and capacity for each. */
+/**
+ * Turns drafts into dated sprints from `start`: each sprint starts the day after the previous one ends unless it
+ * has its own start. Empty drafts are kept (an empty sprint the user added stays in the plan).
+ */
 export function layoutPlan(drafts: DraftSprint[], all: RoadmapItem[], track: Track, start: Day, prefs?: CostPrefs): PlanLayout {
   const p = prefs ?? costPrefs(track);
   const perWeek = weeklyCapacity(track);
   const byId = new Map(all.map((i) => [i.id, i]));
   let day = start;
+  let prevEnd: Day | null = null;
   const sprints: LaidOutSprint[] = [];
-  const nonEmpty = drafts.filter((d) => d.itemIds.length);
-  nonEmpty.forEach((d, idx) => {
-    const weeks = clampWeeks(d.weeks);
+  drafts.forEach((d, idx) => {
+    const days = d.days && d.days > 0 ? Math.round(d.days) : clampEditWeeks(d.weeks) * 7;
+    const weeks = Math.max(1, Math.round(days / 7));
     const items = d.itemIds.map((id) => byId.get(id)).filter((x): x is RoadmapItem => !!x);
     const sessions = items.reduce((a, i) => a + itemSessions(i, p), 0);
-    const capacity = weeks * perWeek;
-    const end = addDays(day, weeks * 7 - 1);
-    sprints.push({ index: idx, title: d.title?.trim() || autoTitle(items, idx + 1), deliverable: autoDeliverable(items), start: day, end, weeks, items, sessions, capacity, over: sessions > capacity + 1e-9 });
+    const capacity = Math.max(1, Math.round((days / 7) * perWeek * 10) / 10);
+    const first = d.start ?? day;
+    const end = addDays(first, days - 1);
+    const title = d.title?.trim();
+    sprints.push({
+      index: idx, key: d.key, sprintId: d.sprintId, autoTitle: !title, overlap: !!prevEnd && first <= prevEnd,
+      title: title || autoTitle(items, idx + 1), deliverable: autoDeliverable(items), start: first, end, weeks, items, sessions, capacity,
+      over: sessions > capacity + 1e-9,
+    });
+    prevEnd = end;
     day = addDays(end, 1);
   });
   const warnings: string[] = [];
   const over = sprints.filter((s) => s.over).length;
-  if (over) warnings.push(`${over} sprint có khối lượng vượt số buổi học dự kiến. Bạn có thể kéo dài sprint đó hoặc chuyển bớt mục sang sprint sau.`);
-  if (drafts.length >= MAX_PLANNED_SPRINTS) warnings.push(`Kế hoạch dừng ở ${MAX_PLANNED_SPRINTS} sprint (khoảng nửa năm). Phần còn lại sẽ được xếp khi bạn lập lại kế hoạch.`);
+  if (over) warnings.push(`${over} sprint có khối lượng vượt số buổi học dự kiến. Bạn có thể kéo dài sprint đó hoặc chuyển bớt mục sang sprint khác.`);
+  const overlap = sprints.filter((s) => s.overlap).length;
+  if (overlap) warnings.push(`${overlap} sprint bắt đầu trước khi sprint liền trước kết thúc. Bấm "Xếp ngày nối tiếp" nếu muốn các sprint nối đuôi nhau.`);
+  if (drafts.length >= MAX_PLANNED_SPRINTS) warnings.push(`Kế hoạch có từ ${MAX_PLANNED_SPRINTS} sprint trở lên (khoảng nửa năm). Bạn vẫn có thể lưu, hoặc gộp bớt sprint.`);
   return {
     sprints,
-    finish: sprints.length ? sprints[sprints.length - 1].end : null,
+    finish: sprints.length ? sprints.reduce((a, s) => (s.end > a ? s.end : a), sprints[0].end) : null,
     totalSessions: sprints.reduce((a, s) => a + s.sessions, 0),
     capacityPerWeek: perWeek,
     warnings,
@@ -141,8 +167,9 @@ export function shiftBoundary(drafts: DraftSprint[], i: number, dir: 1 | -1): Dr
   return next;
 }
 
-export function setWeeks(drafts: DraftSprint[], i: number, weeks: number): DraftSprint[] {
-  return drafts.map((d, k) => (k === i ? { ...d, weeks: clampWeeks(weeks) } : d));
+/** Sets a sprint length in weeks (1-8); an exact day length kept from an existing sprint is dropped. */
+export function setWeeks<T extends DraftSprint>(drafts: T[], i: number, weeks: number): T[] {
+  return drafts.map((d, k) => (k === i ? { ...d, weeks: clampEditWeeks(weeks), days: undefined } : d));
 }
 
 /** Remaining items that a new plan should place: not done, and not already in the kept active sprint. */

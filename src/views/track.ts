@@ -31,7 +31,7 @@ function evidenceHtml(l: { evidence: { kind: string; value: string; label?: stri
 
 export function trackView(id: string, params: URLSearchParams): View {
   const t = getTrack(id);
-  if (!t) return { title: 'Không tìm thấy', html: `<section class="card"><p>Không tìm thấy topic này. Có thể nó đã bị xoá.</p><a href="#/">Về trang Hôm nay</a></section>` };
+  if (!t) return { title: 'Không tìm thấy', html: `<section class="card"><p>Không tìm thấy topic này. Có thể nó đã bị xoá.</p><a class="btn small" href="#/">Về trang Hôm nay</a></section>` };
   if (params.get('new-sprint')) return sprintEditor(t);
   const d = today();
   const ctx = ctxFor(t);
@@ -82,7 +82,7 @@ export function trackView(id: string, params: URLSearchParams): View {
         ${l.blocker ? `<p class="small warn-text">Chỗ vướng: ${esc(l.blocker)}</p>` : ''}
         ${evidenceHtml(l)}
       </div>
-      <div class="log-acts"><button class="link-btn" data-act="edit-log" data-id="${l.id}">Chỉnh sửa</button><button class="link-btn" data-act="del-log" data-id="${l.id}">Xoá</button></div>
+      <div class="log-acts"><button class="btn xs" data-act="edit-log" data-id="${l.id}">Chỉnh sửa</button><button class="btn xs danger" data-act="del-log" data-id="${l.id}">Xoá</button></div>
     </li>`).join('')}</ol>${logs.length > 60 ? `<p class="small muted">Đang hiện 60 buổi gần nhất. Bản sao lưu JSON có đầy đủ mọi buổi học.</p>` : ''}` : '<p class="muted">Bạn chưa ghi buổi học nào. Học một chút là đủ để bắt đầu.</p>'}
   </section>
   ${past.length ? `<section class="card"><h2>Các sprint trước</h2><ul class="past">${past.map((p) => `<li><b>${esc(p.title)}</b> <span class="small">${sprintMeta(p, d)}</span><br><span class="small muted">${fmtDay(p.start)} - ${fmtDay(p.end)} · ${esc(p.deliverable)}</span>${p.reflection ? `<p class="small">${esc(p.reflection)}</p>` : ''}</li>`).join('')}</ul></section>` : ''}`;
@@ -103,10 +103,10 @@ function sprintCard(s: Sprint): string {
     ${sprintBar(s, d)}
     <p class="small muted">${fmtDay(s.start)} - ${fmtDay(s.end)} · đã qua ${p.elapsed}/${p.totalDays} ngày${p.pace === 'behind' ? ' · bạn có thể bớt một milestone hoặc chia nhỏ hơn' : ''}</p>
     <ul class="milestones ms-rail" style="--done:${s.milestones.length ? (s.milestones.filter((m) => m.done).length / s.milestones.length).toFixed(3) : 0}">${s.milestones
-      .map((m) => `<li class="${m.done ? 'done' : ''}"><label><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${m.id}" ${m.done ? 'checked' : ''}><span>${esc(m.text)}</span></label>${m.itemId ? '<span class="badge" title="Milestone này là một mục trong lộ trình; đánh dấu ở đâu cũng được">lộ trình</span>' : ''}${m.doneOn ? `<span class="small muted">${fmtDay(m.doneOn)}</span>` : ''}<button class="link-btn" data-act="ms-del" data-sprint="${s.id}" data-ms="${m.id}" aria-label="Xoá milestone">Xoá</button></li>`)
+      .map((m) => `<li class="${m.done ? 'done' : ''}"><label><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${m.id}" ${m.done ? 'checked' : ''}><span>${esc(m.text)}</span></label>${m.itemId ? '<span class="badge" title="Milestone này là một mục trong lộ trình; đánh dấu ở đâu cũng được">lộ trình</span>' : ''}${m.doneOn ? `<span class="small muted">${fmtDay(m.doneOn)}</span>` : ''}<button class="btn xs danger" data-act="ms-del" data-sprint="${s.id}" data-ms="${m.id}" aria-label="Xoá milestone">Xoá</button></li>`)
       .join('')}</ul>
     <form class="row gap ms-add" data-sprint="${s.id}"><input name="ms" placeholder="Thêm một milestone, ví dụ: viết README" class="grow" maxlength="300"><button class="btn small">Thêm milestone</button></form>
-    <div class="row gap wrap"><a class="btn ghost small" href="#/t/${s.trackId}/sprint/${s.id}">Chỉnh sửa sprint</a><button class="btn small" data-act="finish-sprint" data-id="${s.id}">Kết thúc sprint</button></div>
+    <div class="row gap wrap">${s.milestones.some((m) => m.itemId) || itemsOf(s.trackId).some((i) => !i.done) ? `<a class="btn small" href="#/t/${s.trackId}/plan">Sửa mục trong sprint</a>` : ''}<a class="btn ghost small" href="#/t/${s.trackId}/sprint/${s.id}">Sửa sprint</a><button class="btn small" data-act="finish-sprint" data-id="${s.id}">Kết thúc sprint</button></div>
   </section>`;
 }
 

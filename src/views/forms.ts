@@ -47,7 +47,7 @@ function evidenceItem(e: Evidence, i: number): string {
       : e.kind === 'link'
         ? `<span class="ev-kind">Link</span><span class="ev-text">${esc(e.label ? e.label + ' - ' : '')}${esc(e.value)}</span>`
         : `<span class="ev-kind">Ghi chú</span><span class="ev-text">${esc(e.value)}</span>`;
-  return `<li class="ev-item">${body}<button type="button" class="link-btn" data-rm="${i}" aria-label="Bỏ mục này">Bỏ</button></li>`;
+  return `<li class="ev-item">${body}<button type="button" class="btn xs danger" data-rm="${i}" aria-label="Bỏ mục này">Bỏ</button></li>`;
 }
 
 export function openLogDialog(trackId: string, opts: { logId?: string; kind?: LogKind; day?: string; minutes?: number; note?: string; onSaved?: () => void } = {}): void {

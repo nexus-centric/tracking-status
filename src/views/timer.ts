@@ -148,7 +148,7 @@ function activeView(s: TimerSession): string {
     </dl>
     ${s.mode === 'pomodoro' ? '<p class="small muted">Thời gian nghỉ không được tính vào buổi học.</p>' : ''}
     <div class="row gap wrap tm-controls">${controls}</div>
-    <button class="link-btn danger-link" data-tm="discard">Bỏ buổi này, không lưu</button>
+    <button class="btn small ghost danger" data-tm="discard">Bỏ buổi này, không lưu</button>
   </section>`;
 }
 

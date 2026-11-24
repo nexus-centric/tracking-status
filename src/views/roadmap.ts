@@ -1,7 +1,8 @@
 // Roadmap: overview card on the track page, the full roadmap page, paste-to-import and the sprint planner.
 import { addDays, diffDays, fmtDay, today } from '../core/dates.js';
 import { fmtMinutes } from '../core/format.js';
-import { itemsToPlan, layoutPlan, planChanges, planStart, proposePlan, setWeeks, shiftBoundary, type DraftSprint, type PlanLayout } from '../core/plan.js';
+import { EDIT_MAX_WEEKS, itemsToPlan, layoutPlan, planChanges, planStart, proposePlan, setWeeks, type PlanLayout } from '../core/plan.js';
+import { addSprint, chainDates, draftsFromSprints, hasPhases, mergeWithNext, moveItems, moveSprint, moveWithin, proposeByPhase, removeSprint, renameSprint, saveChanges, setStart, splitSprint, unplacedIds, withKeys, type EditDraft } from '../core/plan-edit.js';
 import { costPrefs, moveItem, plannedItemIds, projectRoadmap, renumber, roadmapProgress, type CostPrefs, type Projection, type RoadmapProgress } from '../core/roadmap.js';
 import { parseRoadmapInput, type DraftItem, type ParseOutcome } from '../core/roadmap-parse.js';
 import { activeSprint, sprintProgress } from '../core/sprint.js';
@@ -119,7 +120,7 @@ export function plannedCard(t: Track): string {
     ? `<button class="btn small primary" data-act="start-planned" data-id="${next.id}" data-shift="0">Bắt đầu sprint này</button>`
     : `<button class="btn small primary" data-act="start-planned" data-id="${next.id}" data-shift="1">Bắt đầu từ hôm nay</button><button class="btn small ghost" data-act="start-planned" data-id="${next.id}" data-shift="0">Giữ ngày ${fmtDate(next.start)}</button>`;
   return `<section class="card planned-card">
-    <div class="row between wrap"><h2>Các sprint tiếp theo</h2><a class="small" href="#/t/${t.id}/plan">Sửa kế hoạch</a></div>
+    <div class="row between wrap"><h2>Các sprint tiếp theo</h2><a class="btn small" href="#/t/${t.id}/plan">Sửa kế hoạch</a></div>
     ${hasActive ? '' : `<p class="small muted">Chưa có sprint nào đang chạy. ${next.start === d ? 'Sprint kế tiếp bắt đầu hôm nay.' : `Sprint kế tiếp dự kiến bắt đầu ${fmtDate(next.start)}. "Bắt đầu từ hôm nay" sẽ dời sprint này và các sprint sau theo cùng số ngày.`}</p><div class="row gap wrap">${startBtns}</div>`}
     <ol class="plan-list">${planned.map((s) => `<li><b>${esc(s.title)}</b><span class="small muted mono">${fmtDate(s.start)} - ${fmtDate(s.end)} · ${s.milestones.length} mục</span></li>`).join('')}</ol>
   </section>`;
@@ -129,7 +130,7 @@ export function plannedCard(t: Track): string {
 
 export function roadmapView(id: string): View {
   const t = getTrack(id);
-  if (!t) return { title: 'Không tìm thấy', html: '<section class="card"><p>Không tìm thấy topic này.</p><a href="#/">Về trang Hôm nay</a></section>' };
+  if (!t) return { title: 'Không tìm thấy', html: '<section class="card"><p>Không tìm thấy topic này.</p><a class="btn small" href="#/">Về trang Hôm nay</a></section>' };
   const items = itemsOf(t.id);
   if (!items.length) return importView(id);
   const d = today();
@@ -150,8 +151,8 @@ export function roadmapView(id: string): View {
     const badge = s ? `<span class="badge${s.status === 'active' ? ' on' : ''}">${s.status === 'active' ? 'sprint hiện tại' : `sprint từ ${fmtDate(s.start)}`}</span>` : '';
     return `<li class="ri${i.done ? ' done' : ''}" data-id="${i.id}">
       <label class="ri-check"><input type="checkbox" data-act="ri-done" data-id="${i.id}" ${i.done ? 'checked' : ''}><span class="ri-title">${esc(i.title)}</span></label>
-      <span class="ri-meta">${i.estimate ? `<span class="est">${esc(estText(i.estimate))}</span>` : ''}${badge}${i.done && i.doneOn ? `<span class="small muted">xong ${fmtDate(i.doneOn)}</span>` : ''}${i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener noreferrer" class="small">Mở link</a>` : ''}</span>
-      <span class="ri-acts"><button class="icon-btn" data-act="ri-up" data-id="${i.id}" aria-label="Lên trên" ${k === 0 ? 'disabled' : ''}>↑</button><button class="icon-btn" data-act="ri-down" data-id="${i.id}" aria-label="Xuống dưới" ${k === items.length - 1 ? 'disabled' : ''}>↓</button><button class="link-btn" data-act="ri-edit" data-id="${i.id}">Sửa</button><button class="link-btn" data-act="ri-del" data-id="${i.id}">Xoá</button></span>
+      <span class="ri-meta">${i.estimate ? `<span class="est">${esc(estText(i.estimate))}</span>` : ''}${badge}${i.done && i.doneOn ? `<span class="small muted">xong ${fmtDate(i.doneOn)}</span>` : ''}${i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener noreferrer" class="btn xs">Mở link ↗</a>` : ''}</span>
+      <span class="ri-acts"><button class="icon-btn" data-act="ri-up" data-id="${i.id}" aria-label="Lên trên" ${k === 0 ? 'disabled' : ''}>↑</button><button class="icon-btn" data-act="ri-down" data-id="${i.id}" aria-label="Xuống dưới" ${k === items.length - 1 ? 'disabled' : ''}>↓</button><button class="btn xs" data-act="ri-edit" data-id="${i.id}">Sửa</button><button class="btn xs danger" data-act="ri-del" data-id="${i.id}">Xoá</button></span>
     </li>`;
   };
   let k = 0;
@@ -446,27 +447,33 @@ export function importView(id: string): View {
 
 // ---------------------------------------------------------------- Planner
 
+/**
+ * Free-form sprint planner. Opens on the current open sprints (running + planned) when there are any, otherwise
+ * on a preset split. Any sprint can hold any items in any order; presets only give a starting point. Nothing is
+ * written until "Lưu kế hoạch"; a change to the running sprint asks for confirmation first.
+ */
 export function planView(id: string): View {
   const t = getTrack(id);
   if (!t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy topic này.</p>' };
   const items = itemsOf(t.id);
   if (!items.length) return importView(id);
   const d = today();
-  const active = activeSprint(state.sprints, t.id);
-  const activeLate = !!active && ['overdue', 'behind'].includes(sprintProgress(active, d).pace);
   const p0 = costPrefs(t);
+  const phased = hasPhases(items);
+  const existing = state.sprints.some((s) => s.trackId === t.id && (s.status === 'active' || s.status === 'planned'));
   const html = `<section class="editor rm-plan">
     <a href="#/t/${t.id}/roadmap" class="back">Lộ trình</a>
     <h1>Kế hoạch sprint</h1>
-    <p class="muted">App chia các mục chưa xong thành những sprint 2 đến 4 tuần theo mục tiêu ${t.weeklyTarget} ngày học mỗi tuần. Bạn chỉnh tuỳ ý rồi mới tạo; không có ngày nào bị dời nếu bạn không xác nhận.</p>
+    <p class="muted">Sprint nào cũng chứa được bất kỳ mục nào, theo thứ tự bạn muốn. Chọn một cách chia nhanh để có bản nháp, rồi thêm, xoá, đổi tên, đổi ngày, tách, gộp hoặc chuyển mục giữa các sprint. Chưa có gì thay đổi cho đến khi bạn bấm Lưu.</p>
     <form class="plan-form card" novalidate>
       <div class="grid2">
-        <label class="field"><span>Bắt đầu từ</span><input type="date" name="start"></label>
-        <div class="field"><span>Mỗi sprint</span><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="weeks" value="${w}" ${w === 3 ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div></div>
+        <label class="field"><span>Sprint đầu bắt đầu từ</span><input type="date" name="start"></label>
         <label class="field"><span>Một buổi học dài (phút)</span><input type="number" name="sessionMinutes" min="5" max="480" value="${p0.sessionMinutes}" class="num"></label>
         <label class="field"><span>Mục không có ước lượng: số mục mỗi buổi</span><input type="number" name="itemsPerSession" min="0.1" max="20" step="0.5" value="${p0.itemsPerSession}" class="num"></label>
       </div>
-      ${active ? `<label class="toggle"><input type="checkbox" name="closeActive" ${activeLate ? 'checked' : ''}><span><b>Khép sprint "${esc(active.title)}" và xếp lại các mục chưa xong của nó.</b> Bỏ chọn để giữ nguyên sprint đang chạy; kế hoạch mới bắt đầu sau ngày ${fmtDate(active.end)}.</span></label>` : ''}
+      <div class="field"><span>Chia nhanh: tạo bản nháp mới cho mọi mục chưa xong (sprint đang chạy nhận phần đầu tiên và giữ ngày bắt đầu). Sau đó bạn vẫn sửa tự do</span>
+        <div class="row gap wrap preset">${[2, 3, 4].map((w) => `<button type="button" class="btn small" data-preset="w${w}">Mỗi sprint ${w} tuần</button>`).join('')}<button type="button" class="btn small" data-preset="phase" ${phased ? '' : 'disabled title="Lộ trình chưa chia phần"'}>Mỗi phần một sprint</button></div>
+      </div>
     </form>
     <div class="plan-out"></div>
   </section>`;
@@ -476,76 +483,230 @@ export function planView(id: string): View {
     mount(root) {
       const form = root.querySelector<HTMLFormElement>('.plan-form')!;
       const out = root.querySelector<HTMLElement>('.plan-out')!;
-      const f = (n: string) => form.elements.namedItem(n) as HTMLInputElement | null;
-      let drafts: DraftSprint[] = [];
-      let startTouched = false;
+      const f = (n: string) => form.elements.namedItem(n) as HTMLInputElement;
+      let drafts: EditDraft[] = [];
+      let dirty = false;
+      const sel = new Set<string>();
+      const open = new Set<string>();
       const read = () => {
-        const sm = Math.round(Math.max(5, Math.min(480, Number(f('sessionMinutes')!.value) || p0.sessionMinutes)));
-        const ip = Math.round(Math.max(0.1, Math.min(20, Number(f('itemsPerSession')!.value) || p0.itemsPerSession)) * 10) / 10;
-        const closeActive = !!f('closeActive')?.checked;
+        const sm = Math.round(Math.max(5, Math.min(480, Number(f('sessionMinutes').value) || p0.sessionMinutes)));
+        const ip = Math.round(Math.max(0.1, Math.min(20, Number(f('itemsPerSession').value) || p0.itemsPerSession)) * 10) / 10;
         const track: Track = { ...t, sessionMinutes: sm, itemsPerSession: ip };
-        const weeks = Number(form.querySelector<HTMLInputElement>('[name="weeks"]:checked')?.value ?? 3);
-        if (!startTouched) f('start')!.value = planStart(state.sprints, t.id, d, closeActive);
-        const start = f('start')!.value || d;
-        return { track, weeks, closeActive, start };
+        return { track, start: f('start').value || d };
       };
-      const repropose = () => {
+      const remaining = () => itemsOf(t.id).filter((i) => !i.done);
+      const activeDraft = () => drafts.find((x) => x.sprintId && state.sprints.find((s) => s.id === x.sprintId)?.status === 'active');
+      const applyPreset = (kind: string) => {
         const r = read();
-        drafts = proposePlan(itemsToPlan(state.roadmap, state.sprints, t.id, r.closeActive), r.track, r.weeks);
+        const keep = activeDraft();
+        const fresh = withKeys(kind === 'phase' && phased ? proposeByPhase(remaining(), r.track) : proposePlan(remaining(), r.track, Number(kind.slice(1)) || 3));
+        // The running sprint keeps its identity and start day but takes the first part of the new split.
+        if (keep && fresh.length) fresh[0] = { ...fresh[0], key: keep.key, sprintId: keep.sprintId, start: keep.start, title: keep.title };
+        drafts = keep && !fresh.length ? [{ ...keep, itemIds: [] }] : fresh;
+        if (!keep) f('start').value = f('start').value || d;
+        sel.clear();
+        dirty = true;
         paint();
       };
-      const paint = () => {
-        const r = read();
-        const all = itemsOf(t.id);
-        const L = layoutPlan(drafts, all, r.track, r.start);
-        const replaced = state.sprints.filter((s) => s.trackId === t.id && s.status === 'planned').length;
-        if (!L.sprints.length) { out.innerHTML = '<section class="card"><p>Mọi mục còn lại đã nằm trong sprint đang chạy hoặc đã xong. Không cần lập thêm sprint nào.</p></section>'; return; }
-        out.innerHTML = `<ol class="plan-sprints">${L.sprints.map((s, i) => `<li class="card ps${s.over ? ' over' : ''}${i === 0 && !(active && !r.closeActive) ? ' first' : ''}">
-          <div class="row between wrap"><input class="ps-title" data-i="${i}" value="${esc(s.title)}" maxlength="200" aria-label="Tên sprint ${i + 1}"><span class="small muted mono">${fmtDate(s.start)} - ${fmtDate(s.end)}</span></div>
-          <div class="row gap wrap"><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="w${i}" data-weeks="${i}" value="${w}" ${w === s.weeks ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div>
-          <span class="small ${s.over ? 'warn-text' : 'muted'}">${sessionsText(s.sessions)} / ${s.capacity} buổi</span></div>
-          <div class="load"><i style="width:${Math.min(100, (s.sessions / s.capacity) * 100).toFixed(1)}%"></i></div>
-          <details><summary>${s.items.length} mục: ${esc(s.items[0].title)}${s.items.length > 1 ? ` … ${esc(s.items[s.items.length - 1].title)}` : ''}</summary><ol class="small">${s.items.map((it) => `<li>${esc(it.title)}${it.estimate ? ` <span class="est">${esc(estText(it.estimate))}</span>` : ''}</li>`).join('')}</ol></details>
-          ${i < L.sprints.length - 1 || s.items.length > 1 ? `<div class="row gap wrap ps-move">${s.items.length > 1 ? `<button type="button" class="link-btn" data-push="${i}">Chuyển mục cuối sang sprint sau</button>` : ''}${i < L.sprints.length - 1 ? `<button type="button" class="link-btn" data-pull="${i}">Kéo mục đầu của sprint sau về</button>` : ''}</div>` : ''}
-        </li>`).join('')}</ol>
-        <section class="card plan-foot">
-          <p><b>${L.sprints.length} sprint</b>, dự kiến xong <b>${L.finish ? fmtDate(L.finish) : ''}</b> nếu học ${L.capacityPerWeek} ngày mỗi tuần (${sessionsText(L.totalSessions)}).</p>
-          ${L.warnings.map((w) => `<p class="small warn-text">${esc(w)}</p>`).join('')}
-          ${replaced ? `<p class="small muted">${replaced} sprint đã lên kế hoạch trước đó sẽ được thay bằng kế hoạch này.</p>` : ''}
-          <div class="row gap between wrap"><button type="button" class="btn ghost" data-reset>Chia lại tự động</button><button type="button" class="btn primary" data-create>Tạo ${L.sprints.length} sprint</button></div>
-        </section>`;
+      const load = () => {
+        drafts = draftsFromSprints(state.sprints, itemsOf(t.id), t.id);
+        f('start').value = drafts[0]?.start ?? planStart(state.sprints, t.id, d, false);
+        dirty = false;
+        sel.clear();
+        if (!drafts.length) { applyPreset(phased ? 'phase' : 'w3'); dirty = false; paint(); return; }
+        paint();
       };
+      const itemList = (ids: string[], i: number | null) => {
+        const byId = new Map(itemsOf(t.id).map((x) => [x.id, x]));
+        const list = ids.map((x) => byId.get(x)).filter((x): x is RoadmapItem => !!x);
+        const groups: { name: string; items: RoadmapItem[] }[] = [];
+        for (const it of list) {
+          const n = it.phase ?? '';
+          if (!groups.length || groups[groups.length - 1].name !== n) groups.push({ name: n, items: [] });
+          groups[groups.length - 1].items.push(it);
+        }
+        const showGroups = groups.some((g) => g.name);
+        let k = 0;
+        return `<ul class="pi-list">${groups.map((g, gi) => `${showGroups ? `<li class="pi-group"><label><input type="checkbox" data-selgroup="${i ?? -1}:${gi}" ${g.items.every((x) => sel.has(x.id)) ? 'checked' : ''}><span>${esc(g.name || 'Chưa có phần')}</span></label><span class="small muted mono">${g.items.length} mục</span></li>` : ''}${g.items.map((it) => {
+          const pos = k++;
+          return `<li class="pi${sel.has(it.id) ? ' on' : ''}"><label><input type="checkbox" data-sel="${it.id}" ${sel.has(it.id) ? 'checked' : ''}><span>${esc(it.title)}</span>${it.estimate ? ` <span class="est">${esc(estText(it.estimate))}</span>` : ''}</label>${i === null ? '' : `<span class="pi-acts"><button type="button" class="icon-btn" data-up="${i}" data-id="${it.id}" aria-label="Lên trên trong sprint" ${pos === 0 ? 'disabled' : ''}>↑</button><button type="button" class="icon-btn" data-down="${i}" data-id="${it.id}" aria-label="Xuống dưới trong sprint" ${pos === list.length - 1 ? 'disabled' : ''}>↓</button></span>`}</li>`;
+        }).join('')}`).join('')}</ul>`;
+      };
+      const groupIds = (i: number, gi: number): string[] => {
+        const ids = i < 0 ? unplacedIds(drafts, remaining()) : drafts[i].itemIds;
+        const byId = new Map(itemsOf(t.id).map((x) => [x.id, x]));
+        const groups: string[][] = [];
+        let last: string | null = null;
+        for (const x of ids) {
+          const n = byId.get(x)?.phase ?? '';
+          if (last === null || n !== last) groups.push([]);
+          groups[groups.length - 1].push(x);
+          last = n;
+        }
+        return groups[gi] ?? [];
+      };
+      const paint = () => {
+        const y = window.scrollY;
+        const r = read();
+        const L = layoutPlan(drafts, itemsOf(t.id), r.track, r.start);
+        const pool = unplacedIds(drafts, remaining());
+        const ch = saveChanges(L, r.track, state.sprints, itemsOf(t.id), d, () => 'x');
+        const statusOf = (sid?: string) => state.sprints.find((s) => s.id === sid)?.status;
+        const n = sel.size;
+        const opts = L.sprints.map((s, i) => `<option value="${i}">Sprint ${i + 1}: ${esc(s.title.slice(0, 60))}</option>`).join('');
+        out.innerHTML = `<div class="sel-bar card" role="region" aria-label="Mục đã chọn">
+            <span class="small"><b>${n}</b> mục đã chọn</span>
+            <label class="small">Chuyển tới <select data-target>${opts}<option value="new">Sprint mới ở cuối</option></select></label>
+            <button type="button" class="btn small primary" data-move ${n ? '' : 'disabled'}>Chuyển</button>
+            <button type="button" class="btn small" data-unplace ${n ? '' : 'disabled'}>Bỏ khỏi sprint</button>
+            <button type="button" class="btn small ghost" data-clear ${n ? '' : 'disabled'}>Bỏ chọn</button>
+          </div>
+          ${L.sprints.length ? '' : '<section class="card"><p class="muted">Chưa có sprint nào. Chọn một cách chia nhanh ở trên hoặc thêm sprint trống.</p></section>'}
+          <ol class="plan-sprints">${L.sprints.map((s, i) => {
+          const dr = drafts[i];
+          const st = statusOf(dr.sprintId);
+          const isOpen = open.has(dr.key);
+          const days = dr.days && dr.days % 7 ? dr.days : 0;
+          const hereSel = dr.itemIds.filter((x) => sel.has(x)).length;
+          return `<li class="card ps${s.over ? ' over' : ''}${st === 'active' ? ' first' : ''}" data-key="${dr.key}">
+          <div class="ps-head"><span class="ps-no mono">Sprint ${i + 1}</span><span class="badge${st === 'active' ? ' on' : ''}">${st === 'active' ? 'đang chạy' : st === 'planned' ? 'đã lên lịch' : 'mới'}</span>${s.autoTitle ? '<span class="small muted">tên tự đặt theo nội dung</span>' : ''}</div>
+          <input class="ps-title" data-i="${i}" value="${esc(s.title)}" maxlength="200" aria-label="Tên sprint ${i + 1}">
+          <div class="ps-dates">
+            <label class="small">Bắt đầu <input type="date" data-start="${i}" value="${s.start}"></label>
+            <label class="small">Độ dài <select data-weeks="${i}">${days ? `<option value="d" selected>${days} ngày</option>` : ''}${Array.from({ length: EDIT_MAX_WEEKS }, (_, k) => k + 1).map((w) => `<option value="${w}" ${!days && w === s.weeks ? 'selected' : ''}>${w} tuần</option>`).join('')}</select></label>
+            <span class="small muted mono">${fmtDate(s.start)} - ${fmtDate(s.end)}</span>
+            <span class="small ${s.over ? 'warn-text' : 'muted'}">${sessionsText(s.sessions)} / ${nf.format(s.capacity)} buổi</span>
+          </div>
+          ${s.overlap ? '<p class="small warn-text">Sprint này bắt đầu trước khi sprint liền trước kết thúc.</p>' : ''}
+          <div class="load"><i style="width:${Math.min(100, (s.sessions / s.capacity) * 100).toFixed(1)}%"></i></div>
+          <details data-key="${dr.key}" ${isOpen ? 'open' : ''}><summary>${s.items.length ? `${s.items.length} mục: ${esc(s.items[0].title)}${s.items.length > 1 ? ` … ${esc(s.items[s.items.length - 1].title)}` : ''}` : 'Chưa có mục nào'}</summary>
+            ${s.items.length ? `<div class="row gap wrap pi-tools"><button type="button" class="btn xs" data-selall="${i}">Chọn tất cả</button>${hereSel ? `<span class="small muted">${hereSel} mục trong sprint này đang được chọn</span>` : ''}</div>${itemList(dr.itemIds, i)}` : '<p class="small muted">Chọn mục ở sprint khác hoặc ở danh sách chưa xếp, rồi bấm "Chuyển vào đây".</p>'}
+          </details>
+          <div class="ps-acts">
+            <button type="button" class="btn small primary" data-here="${i}" ${n && hereSel < n ? '' : 'disabled'}>Chuyển ${n || ''} mục đã chọn vào đây</button>
+            <button type="button" class="btn small" data-sup="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Đưa sprint lên trước">↑ Lên</button>
+            <button type="button" class="btn small" data-sdown="${i}" ${i === L.sprints.length - 1 ? 'disabled' : ''} aria-label="Đưa sprint xuống sau">↓ Xuống</button>
+            <button type="button" class="btn small" data-split="${i}" ${s.items.length > 1 ? '' : 'disabled'} title="Tách tại mục đầu tiên đang chọn trong sprint này; không chọn mục nào thì chia đôi">Tách sprint</button>
+            <button type="button" class="btn small" data-merge="${i}" ${i < L.sprints.length - 1 ? '' : 'disabled'}>Gộp với sprint sau</button>
+            <button type="button" class="btn small danger" data-del="${i}">Xoá sprint</button>
+          </div>
+        </li>`;
+        }).join('')}</ol>
+          <section class="card pool${pool.length ? '' : ' empty'}">
+            <div class="row between wrap"><h2>Chưa xếp vào sprint nào</h2><span class="small muted mono">${pool.length} mục</span></div>
+            ${pool.length ? `<details data-key="pool" ${open.has('pool') ? 'open' : ''}><summary>Xem danh sách</summary><div class="row gap wrap pi-tools"><button type="button" class="btn xs" data-selall="-1">Chọn tất cả</button></div>${itemList(pool, null)}</details>` : '<p class="small muted">Mọi mục chưa xong đều đã nằm trong một sprint.</p>'}
+          </section>
+          <div class="row gap wrap"><button type="button" class="btn small" data-add>+ Thêm sprint trống</button><button type="button" class="btn small" data-chain ${L.sprints.length > 1 ? '' : 'disabled'}>Xếp ngày nối tiếp</button></div>
+          <section class="card plan-foot">
+            <p><b>${L.sprints.length} sprint</b>${L.finish ? `, dự kiến xong <b>${fmtDate(L.finish)}</b>` : ''} nếu học ${L.capacityPerWeek} ngày mỗi tuần (${sessionsText(L.totalSessions)}).</p>
+            ${L.warnings.map((w) => `<p class="small warn-text">${esc(w)}</p>`).join('')}
+            ${ch.active ? `<p class="small warn-text">${ch.active.closed ? `Sprint đang chạy "${esc(ch.active.title)}" sẽ được khép lại.` : `Sprint đang chạy "${esc(ch.active.title)}" sẽ thay đổi${ch.active.added ? `, thêm ${ch.active.added} mục` : ''}${ch.active.removed ? `, bớt ${ch.active.removed} mục` : ''}${ch.active.datesChanged ? ', đổi ngày' : ''}.`} App sẽ hỏi lại trước khi lưu.</p>` : ''}
+            ${ch.remove.length ? `<p class="small muted">${ch.remove.length} sprint cũ sẽ bị xoá (chưa có mục nào hoàn thành).</p>` : ''}
+            <div class="row gap between wrap"><button type="button" class="btn ghost" data-reload ${dirty ? '' : 'disabled'}>Bỏ các thay đổi</button><button type="button" class="btn primary" data-save ${dirty || !existing ? '' : 'disabled'}>${existing ? 'Lưu kế hoạch' : `Tạo ${L.sprints.length} sprint`}</button></div>
+          </section>`;
+        window.scrollTo(0, y);
+      };
+      const set = (next: EditDraft[]) => { if (next !== drafts) { drafts = next; dirty = true; } paint(); };
+      const indexOf = (el: HTMLElement, attr: string) => Number(el.closest<HTMLElement>(`[data-${attr}]`)!.dataset[attr]);
       form.addEventListener('change', (e) => {
         const el = e.target as HTMLInputElement;
-        if (el.name === 'start') { startTouched = true; paint(); return; }
-        repropose();
+        if (el.name === 'start' && drafts[0]) { drafts = setStart(drafts, 0, el.value); dirty = true; }
+        paint();
       });
+      form.addEventListener('click', (e) => {
+        const b = (e.target as HTMLElement).closest<HTMLElement>('[data-preset]');
+        if (!b) return;
+        if ((dirty || existing) && !confirm('Chia lại sẽ thay bản nháp hiện tại. Sprint đang chạy nhận phần đầu tiên của cách chia mới; chưa có gì được lưu cho đến khi bạn bấm Lưu. Tiếp tục?')) return;
+        applyPreset(b.dataset.preset!);
+      });
+      out.addEventListener('toggle', (e) => {
+        const el = e.target as HTMLDetailsElement;
+        if (el.tagName !== 'DETAILS' || !el.dataset.key) return;
+        if (el.open) open.add(el.dataset.key); else open.delete(el.dataset.key);
+      }, true);
       out.addEventListener('input', (e) => {
         const el = e.target as HTMLInputElement;
-        if (el.classList.contains('ps-title')) drafts[Number(el.dataset.i)] = { ...drafts[Number(el.dataset.i)], title: el.value };
+        if (el.classList.contains('ps-title')) { drafts = renameSprint(drafts, Number(el.dataset.i), el.value); dirty = true; out.querySelector<HTMLButtonElement>('[data-save]')!.disabled = false; out.querySelector<HTMLButtonElement>('[data-reload]')!.disabled = false; }
       });
       out.addEventListener('change', (e) => {
         const el = e.target as HTMLInputElement;
-        if (el.dataset.weeks !== undefined) { drafts = setWeeks(drafts, Number(el.dataset.weeks), Number(el.value)); paint(); }
+        if (el.dataset.sel) { if (el.checked) sel.add(el.dataset.sel); else sel.delete(el.dataset.sel); paint(); return; }
+        if (el.dataset.selgroup) {
+          const [i, gi] = el.dataset.selgroup.split(':').map(Number);
+          for (const x of groupIds(i, gi)) if (el.checked) sel.add(x); else sel.delete(x);
+          paint(); return;
+        }
+        if (el.dataset.weeks !== undefined && el.value !== 'd') { set(setWeeks(drafts, Number(el.dataset.weeks), Number(el.value))); return; }
+        if (el.dataset.start !== undefined) { set(setStart(drafts, Number(el.dataset.start), el.value)); return; }
+        if (el.classList.contains('ps-title')) paint();
       });
+      const selected = () => {
+        const order = [...drafts.flatMap((x) => x.itemIds), ...unplacedIds(drafts, remaining())];
+        return order.filter((x) => sel.has(x));
+      };
       out.addEventListener('click', async (e) => {
         const el = e.target as HTMLElement;
-        const push = el.closest<HTMLElement>('[data-push]')?.dataset.push;
-        const pull = el.closest<HTMLElement>('[data-pull]')?.dataset.pull;
-        if (push !== undefined) { drafts = shiftBoundary(drafts, Number(push), 1); paint(); return; }
-        if (pull !== undefined) { drafts = shiftBoundary(drafts, Number(pull), -1); paint(); return; }
-        if (el.closest('[data-reset]')) { repropose(); return; }
-        if (el.closest('[data-create]')) {
+        const has = (a: string) => !!el.closest(`[data-${a}]`);
+        if (has('selall')) {
+          const i = indexOf(el, 'selall');
+          const ids = i < 0 ? unplacedIds(drafts, remaining()) : drafts[i].itemIds;
+          const all = ids.every((x) => sel.has(x));
+          for (const x of ids) if (all) sel.delete(x); else sel.add(x);
+          paint(); return;
+        }
+        if (has('clear')) { sel.clear(); paint(); return; }
+        if (has('move')) {
+          const v = out.querySelector<HTMLSelectElement>('[data-target]')!.value;
+          const to = v === 'new' ? drafts.length : Number(v);
+          const ids = selected();
+          sel.clear();
+          set(moveItems(drafts, ids, to));
+          if (v === 'new') open.add(drafts[drafts.length - 1].key);
+          return;
+        }
+        if (has('unplace')) { const ids = selected(); sel.clear(); open.add('pool'); set(moveItems(drafts, ids, -1)); return; }
+        if (has('here')) { const i = indexOf(el, 'here'); const ids = selected(); sel.clear(); open.add(drafts[i].key); set(moveItems(drafts, ids, i)); return; }
+        if (has('up')) { set(moveWithin(drafts, indexOf(el, 'up'), el.closest<HTMLElement>('[data-id]')!.dataset.id!, -1)); return; }
+        if (has('down')) { set(moveWithin(drafts, indexOf(el, 'down'), el.closest<HTMLElement>('[data-id]')!.dataset.id!, 1)); return; }
+        if (has('sup')) { set(moveSprint(drafts, indexOf(el, 'sup'), -1)); return; }
+        if (has('sdown')) { set(moveSprint(drafts, indexOf(el, 'sdown'), 1)); return; }
+        if (has('split')) {
+          const i = indexOf(el, 'split');
+          const ids = drafts[i].itemIds;
+          const k = ids.findIndex((x) => sel.has(x));
+          set(splitSprint(drafts, i, k > 0 ? k : Math.ceil(ids.length / 2)));
+          return;
+        }
+        if (has('merge')) { set(mergeWithNext(drafts, indexOf(el, 'merge'))); return; }
+        if (has('del')) {
+          const i = indexOf(el, 'del');
+          const st = state.sprints.find((s) => s.id === drafts[i].sprintId)?.status;
+          if (drafts[i].itemIds.length && !confirm(`Xoá sprint này? ${drafts[i].itemIds.length} mục của nó sẽ về danh sách "Chưa xếp vào sprint nào", không bị xoá khỏi lộ trình.${st === 'active' ? ' Đây là sprint đang chạy: khi lưu, sprint sẽ được khép lại (giữ các milestone đã xong trong lịch sử).' : ''}`)) return;
+          if (drafts[i].itemIds.length) open.add('pool');
+          set(removeSprint(drafts, i));
+          return;
+        }
+        if (has('add')) { const next = addSprint(drafts); open.add(next[next.length - 1].key); set(next); return; }
+        if (has('chain')) { set(chainDates(drafts, true)); return; }
+        if (has('reload')) { if (confirm('Bỏ mọi thay đổi chưa lưu?')) load(); return; }
+        if (has('save')) {
           const r = read();
           const L = layoutPlan(drafts, itemsOf(t.id), r.track, r.start);
-          const ch = planChanges(L, r.track, state.sprints, d, newId, r.closeActive);
+          const ch = saveChanges(L, r.track, state.sprints, itemsOf(t.id), d, newId);
+          if (ch.active) {
+            const a = ch.active;
+            const msg = a.closed
+              ? `Khép sprint đang chạy "${a.title}"? Các milestone đã xong vẫn được giữ trong lịch sử.`
+              : `Sửa sprint đang chạy "${a.title}"${a.added ? `: thêm ${a.added} mục` : ''}${a.removed ? `${a.added ? ',' : ':'} bớt ${a.removed} mục` : ''}${a.datesChanged ? ', đổi ngày' : ''}. Tiến độ các mục đã xong không đổi. Tiếp tục?`;
+            if (!confirm(msg)) return;
+          }
           if (r.track.sessionMinutes !== t.sessionMinutes || r.track.itemsPerSession !== t.itemsPerSession) await saveTrack(r.track);
-          await commit([], [...(ch.close ? [ch.close] : []), ...ch.create], { deleteSprints: ch.remove });
-          toast(`Đã tạo ${ch.create.length} sprint.`);
+          await commit([], ch.save, { deleteSprints: ch.remove });
+          toast(existing ? 'Đã lưu kế hoạch sprint.' : `Đã tạo ${L.sprints.length} sprint.`);
           location.hash = `#/t/${t.id}`;
         }
       });
-      repropose();
+      load();
     },
   };
 }

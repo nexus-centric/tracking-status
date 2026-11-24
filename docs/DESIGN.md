@@ -208,7 +208,7 @@ warning, not a block. One active sprint per track; starting a new one closes the
 
 ## 5a. Roadmap and sprint planning
 
-Code: `src/core/roadmap-parse.ts`, `src/core/roadmap.ts`, `src/core/plan.ts`, views in `src/views/roadmap.ts`.
+Code: `src/core/roadmap-parse.ts`, `src/core/roadmap.ts`, `src/core/plan.ts`, `src/core/plan-edit.ts`, views in `src/views/roadmap.ts`.
 Tests: `tests/roadmap-parse.test.ts`, `tests/roadmap.test.ts`, `tests/plan.test.ts`.
 
 Problem: with an existing syllabus (a 30-lesson course, a book) typing every milestone by hand was the main
@@ -240,16 +240,30 @@ sessions when it has no estimate. Defaults: 45 minutes per session, 1 item per s
 editable in the import and planner screens. Weekly capacity = `min(weeklyTarget, 7 - restDays)` sessions, one
 session per active day. These are assumptions, not research findings.
 
-Planner (`proposePlan`, `layoutPlan`). Items are filled in roadmap order into sprints of the chosen length
-(2, 3 or 4 weeks; default 3) up to `weeks x capacity` sessions. An item larger than a whole sprint gets a sprint
-of its own and a warning. A short tail (needing under 2 weeks) is folded into the previous sprint when that sprint
-can grow to at most 4 weeks; otherwise the last sprint is shortened, never below 2 weeks (`SPRINT_MIN_DAYS`,
-`SPRINT_MAX_DAYS`). Sprints follow each other without gaps. The user can change each sprint's length and title
-and move items across a boundary before creating. Creating replaces earlier `planned` sprints of the track; the
-active sprint is kept unless the user ticks "close and re-plan" (pre-ticked only when it is behind or overdue).
-With no active sprint, the first new sprint is active and the rest are planned. A planned sprint starts only when
-the user presses "Bắt đầu sprint này" or "Bắt đầu từ hôm nay" (the latter shifts it and later planned sprints by the
-same number of days).
+Planner presets. "Mỗi sprint 2/3/4 tuần" (`proposePlan`): items are filled in roadmap order into sprints of the
+chosen length up to `weeks x capacity` sessions. An item larger than a whole sprint gets a sprint of its own and a
+warning. A short tail (needing under 2 weeks) is folded into the previous sprint when that sprint can grow to at
+most 4 weeks; otherwise the last sprint is shortened, never below 2 weeks. "Mỗi phần một sprint" (`proposeByPhase`,
+only when the roadmap has phases): one sprint per run of consecutive items with the same phase, 1-8 weeks from its
+effort. Presets only produce a draft; the running sprint keeps its identity and start day and takes the first part.
+
+Free-form editing (`src/core/plan-edit.ts`, `#/t/:id/plan`). The planner opens on the open sprints of the track
+(running first, then planned, with their exact dates) or, when there are none, on a preset. Any sprint may hold any
+items in any order; nothing assumes phases. Operations, all pure and previewed before saving: multi-select items
+(single items, a phase group inside a sprint, or a whole sprint) and move them to any sprint, to a new sprint, or
+back to the "Chưa xếp vào sprint nào" pool; reorder items inside a sprint; reorder, split (at the first selected
+item, else in half), merge with the next, add an empty sprint, delete a sprint (its items return to the pool; they
+are never removed from the roadmap); rename; set a start day and a length of 1-8 weeks (the 2-4 week advice stays a
+soft warning; overlaps are flagged and "Xếp ngày nối tiếp" chains the dates again). A title left automatic follows
+the items (the phase name when the sprint holds one phase).
+
+Saving (`saveChanges`). An edited sprint keeps its id, plain milestones and finished milestones; its unfinished
+linked milestones become exactly the draft's items, reusing milestone ids. A deleted open sprint with nothing
+finished is removed; with finished work it is closed (`done` for the running sprint, `dropped` for a planned one)
+and keeps only finished milestones. Any change to the running sprint asks for confirmation. When nothing is running
+and no planned sprint is kept, the first sprint of the plan becomes active; otherwise planned sprints start only
+when the user presses "Bắt đầu sprint này" or "Bắt đầu từ hôm nay" (the latter shifts it and later planned sprints by
+the same number of days). No stored field was added, so existing data needs no migration.
 
 Progress. `% done` = done effort / total effort when at least one item has an estimate, otherwise done items /
 items. Phase boundaries are ticks on the progress line; the line has the same moving beam as the sprint bar and

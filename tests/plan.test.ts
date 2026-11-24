@@ -70,8 +70,9 @@ test('user adjustments: move items across a boundary and change a sprint length'
   assert.deepEqual(d.map((x) => [x.itemIds.length, x.weeks]), [[15, 3], [14, 3], [1, 2]]);
   d = shiftBoundary(d, 1, -1); // pulling the only item back removes the empty sprint
   assert.equal(d.length, 2);
-  d = setWeeks(d, 0, 9);
-  assert.equal(d[0].weeks, 4, 'clamped to 4 weeks');
+  d = setWeeks(d, 0, 12);
+  assert.equal(d[0].weeks, 8, 'hand-set lengths are clamped to 1-8 weeks');
+  d = setWeeks(d, 0, 4);
   const L = layoutPlan(d, list, t, '2026-11-16');
   assert.equal(L.sprints[1].start, '2026-12-14', 'later sprints follow the changed length');
 });
