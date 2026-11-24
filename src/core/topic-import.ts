@@ -15,6 +15,14 @@ export interface ImportedLesson {
   estimate?: Estimate;
 }
 
+export interface ImportedSprintPrefill {
+  title: string;
+  deliverable: string;
+  start?: string;
+  weeks?: number;
+  milestones: string[];
+}
+
 export interface ImportedTopic {
   title: string;
   description: string;
@@ -24,6 +32,7 @@ export interface ImportedTopic {
   weeklyTarget: number;
   restDays: number[];
   lessons: ImportedLesson[];
+  sprint?: ImportedSprintPrefill;
 }
 
 export type TopicImportResult =
@@ -106,6 +115,46 @@ function parseRestDays(raw: unknown, where: string): { ok: true; value: number[]
   return { ok: true, value: out };
 }
 
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseMilestones(raw: unknown, where: string): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (raw == null) return { ok: true, value: [] };
+  if (typeof raw === 'string') {
+    return { ok: true, value: raw.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 12) };
+  }
+  if (!Array.isArray(raw)) return { ok: false, error: `${where}: milestones phải là mảng, mỗi phần tử là chuỗi hoặc { "text": "..." }.` };
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    const text = typeof item === 'string' ? item.trim() : isRecord(item) ? (str(item.text) ?? str(item.title) ?? '').trim() : '';
+    if (!text) return { ok: false, error: `${where}, milestone thứ ${i + 1} thiếu nội dung.` };
+    out.push(text.slice(0, 300));
+  }
+  return { ok: true, value: out.slice(0, 12) };
+}
+
+function parseSprintPrefill(raw: Record<string, unknown>, where: string): { ok: true; value?: ImportedSprintPrefill } | { ok: false; error: string } {
+  const extra = isRecord(raw.sprint) ? raw.sprint : {};
+  const title = (str(extra.title) ?? str(raw.sprintTitle) ?? (typeof raw.sprint === 'string' ? raw.sprint : '') ?? '').trim().slice(0, 200);
+  const deliverable = (str(extra.deliverable) ?? str(raw.deliverable) ?? '').trim().slice(0, 500);
+  const startRaw = (str(extra.start) ?? str(extra.startDate) ?? str(raw.start) ?? str(raw.startDate) ?? '').trim();
+  const weeksRaw = extra.weeks ?? raw.weeks;
+  const msRaw = extra.milestones ?? raw.milestones;
+  if (!title && !deliverable && !startRaw && weeksRaw == null && msRaw == null) return { ok: true };
+  if (startRaw && !DAY.test(startRaw)) return { ok: false, error: `${where}: start phải có dạng YYYY-MM-DD.` };
+  let weeks: number | undefined;
+  if (weeksRaw != null) {
+    if (weeksRaw !== 2 && weeksRaw !== 3 && weeksRaw !== 4) {
+      return { ok: false, error: `${where}: weeks phải là 2, 3 hoặc 4.` };
+    }
+    weeks = weeksRaw;
+  }
+  const ms = parseMilestones(msRaw, where);
+  if (!ms.ok) return ms;
+  return { ok: true, value: { title, deliverable, start: startRaw || undefined, weeks, milestones: ms.value } };
+}
+
 function parseTopic(raw: unknown, where: string): { ok: true; topic: ImportedTopic } | { ok: false; error: string } {
   if (!isRecord(raw)) return { ok: false, error: `${where} phải là một object topic, ví dụ { "title": "...", "lessons": [...] }.` };
   const title = (str(raw.title) ?? str(raw.name) ?? '').trim();
@@ -150,6 +199,8 @@ function parseTopic(raw: unknown, where: string): { ok: true; topic: ImportedTop
       lessons.push(lesson.lesson);
     }
   }
+  const sprint = parseSprintPrefill(raw, where);
+  if (!sprint.ok) return sprint;
   return {
     ok: true,
     topic: {
@@ -161,6 +212,7 @@ function parseTopic(raw: unknown, where: string): { ok: true; topic: ImportedTop
       weeklyTarget,
       restDays: rest.value,
       lessons,
+      sprint: sprint.value,
     },
   };
 }
@@ -242,4 +294,17 @@ export function lessonsToParseOutcome(lessons: ImportedLesson[]): ParseOutcome {
     truncated: false,
     warnings: [],
   };
+}
+
+/** JSON the existing new-topic roadmap box already understands (parseRoadmapInput). */
+export function lessonsToRoadmapText(lessons: ImportedLesson[]): string {
+  if (!lessons.length) return '';
+  return JSON.stringify(lessons.map((l) => {
+    const o: Record<string, unknown> = { title: l.title };
+    if (l.url) o.link = l.url;
+    if (l.phase) o.phase = l.phase;
+    if (l.estimate?.unit === 'min') o.minutes = l.estimate.value;
+    else if (l.estimate?.unit === 'session') o.sessions = l.estimate.value;
+    return o;
+  }), null, 2);
 }

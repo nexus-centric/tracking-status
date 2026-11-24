@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseTopicImport, topicImportPreview, trackFromImport } from '../src/core/topic-import.js';
+import { parseRoadmapInput } from '../src/core/roadmap-parse.js';
+import { lessonsToRoadmapText, parseTopicImport, topicImportPreview, trackFromImport } from '../src/core/topic-import.js';
 
 const sample = readFileSync('docs/topic-import.sample.json', 'utf8');
 
@@ -17,6 +18,13 @@ test('parses the documented sample file', () => {
   assert.equal(r.topics[0].lessons[1].phase, 'Pod và workload');
   assert.deepEqual(r.topics[0].lessons[1].estimate, { unit: 'min', value: 45 });
   assert.equal(r.topics[1].lessons[1].estimate?.unit, 'session');
+  assert.deepEqual(r.topics[0].sprint, {
+    title: 'Nền tảng cluster',
+    deliverable: 'Một cluster lab chạy được Deployment mẫu',
+    start: undefined,
+    weeks: 3,
+    milestones: ['Đọc xong phần tổng quan', 'Chạy được Deployment'],
+  });
   const prev = topicImportPreview(r.topics);
   assert.deepEqual(prev, {
     topicCount: 2,
@@ -87,4 +95,52 @@ test('trackFromImport fills required Track fields and keeps optional copy', () =
   assert.deepEqual(t.restDays, [0]);
   assert.equal(t.archived, false);
   assert.equal(trackFromImport({ ...r.topics[0], tinyAction: '', color: undefined }, { id: 't2', color: '#2f5bea', createdAt: '2026-11-24' }).tinyAction, 'học 10 phút');
+});
+
+test('parses optional sprint fields from an object or top-level aliases', () => {
+  const obj = parseTopicImport(JSON.stringify({
+    title: 'Lab',
+    sprint: { title: 'Tuần đầu', deliverable: 'Repo khởi tạo', start: '2026-11-24', weeks: 2, milestones: [{ text: 'Init repo' }, 'README'] },
+  }));
+  assert.equal(obj.ok, true);
+  if (obj.ok) {
+    assert.deepEqual(obj.topics[0].sprint, {
+      title: 'Tuần đầu', deliverable: 'Repo khởi tạo', start: '2026-11-24', weeks: 2, milestones: ['Init repo', 'README'],
+    });
+  }
+  const flat = parseTopicImport(JSON.stringify({
+    title: 'Lab',
+    sprintTitle: 'Sprint tay',
+    deliverable: 'Một PR',
+    weeks: 4,
+    milestones: 'Mốc A\nMốc B',
+  }));
+  assert.equal(flat.ok, true);
+  if (flat.ok) {
+    assert.equal(flat.topics[0].sprint?.title, 'Sprint tay');
+    assert.equal(flat.topics[0].sprint?.weeks, 4);
+    assert.deepEqual(flat.topics[0].sprint?.milestones, ['Mốc A', 'Mốc B']);
+  }
+  assert.match(importError(JSON.stringify({ title: 'Lab', weeks: 5 })), /weeks phải là 2, 3 hoặc 4/);
+  assert.match(importError(JSON.stringify({ title: 'Lab', start: '24-11-2026' })), /YYYY-MM-DD/);
+});
+
+test('lessonsToRoadmapText is understood by the existing roadmap parser', () => {
+  const r = parseTopicImport(JSON.stringify({
+    title: 'K8s',
+    lessons: [
+      { title: 'Tổng quan', url: 'https://example.com/overview' },
+      { title: 'Pod', url: 'https://example.com/pod', phase: 'Workload', estimate: { unit: 'min', value: 45 } },
+      { title: 'Lab', estimate: { unit: 'session', value: 1 } },
+    ],
+  }));
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  const parsed = parseRoadmapInput(lessonsToRoadmapText(r.topics[0].lessons));
+  assert.equal(parsed.items.length, 3);
+  assert.equal(parsed.items[0].link, 'https://example.com/overview');
+  assert.equal(parsed.items[1].phase, 'Workload');
+  assert.deepEqual(parsed.items[1].estimate, { unit: 'min', value: 45 });
+  assert.deepEqual(parsed.items[2].estimate, { unit: 'session', value: 1 });
+  assert.equal(lessonsToRoadmapText([]), '');
 });

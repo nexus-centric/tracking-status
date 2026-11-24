@@ -51,8 +51,10 @@ from Settings without touching real records. It is used for trying the app and f
 
 This is separate from Settings backup import/export (which saves or restores the whole database). On
 "Thêm topic học mới" you can paste JSON or choose a `.json` file that describes one topic or a list of topics,
-each with a lesson list. The form previews the counts, then creates the topics (and 3-week sprints when there
-are lessons). A sample file is at [docs/topic-import.sample.json](docs/topic-import.sample.json).
+each with a lesson list. The app previews the counts and can fill the form (name, why, daily plan, lesson list,
+and sprint fields when present). Nothing is saved until you click "Tạo topic" and you can edit the form first.
+If the file has several topics, fill and submit them one at a time. A sample file is at
+[docs/topic-import.sample.json](docs/topic-import.sample.json).
 
 Accepted shapes: a single topic object, an array of topics, or `{ "topics": [ ... ] }`.
 
@@ -63,6 +65,12 @@ Accepted shapes: a single topic object, an array of topics, or `{ "topics": [ ..
   "tinyAction": "optional smallest step that still counts",
   "plan": "optional when/where plan",
   "weeklyTarget": 4,
+  "sprint": {
+    "title": "Optional first sprint title",
+    "deliverable": "optional concrete output",
+    "weeks": 3,
+    "milestones": ["optional milestone"]
+  },
   "lessons": [
     {
       "title": "Tổng quan kiến trúc",
@@ -75,8 +83,10 @@ Accepted shapes: a single topic object, an array of topics, or `{ "topics": [ ..
 ```
 
 Aliases: `name` for `title`, `why` for `description`, `items` for `lessons`, `link` for `url`. `estimate` may
-also be a number of minutes. A Settings backup (`app: "nhip"`) is rejected here with a pointer to Settings.
-Invalid JSON and missing titles get a Vietnamese error before anything is saved.
+also be a number of minutes. Optional sprint fields may be a `sprint` object or top-level `sprintTitle`,
+`deliverable`, `start` (YYYY-MM-DD), `weeks` (2, 3 or 4) and `milestones`. A Settings backup (`app: "nhip"`) is
+rejected here with a pointer to Settings. Invalid JSON and missing titles get a Vietnamese error; the form is
+not filled and nothing is saved.
 
 ## Run locally
 

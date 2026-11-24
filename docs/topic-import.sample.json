@@ -6,6 +6,12 @@
       "tinyAction": "đọc 10 phút docs Kubernetes",
       "plan": "Sau khi ăn tối, mở docs tại bàn làm việc",
       "weeklyTarget": 4,
+      "sprint": {
+        "title": "Nền tảng cluster",
+        "deliverable": "Một cluster lab chạy được Deployment mẫu",
+        "weeks": 3,
+        "milestones": ["Đọc xong phần tổng quan", "Chạy được Deployment"]
+      },
       "lessons": [
         {
           "title": "Tổng quan kiến trúc",

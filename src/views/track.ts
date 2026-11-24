@@ -7,7 +7,7 @@ import type { Milestone, Sprint, Track } from '../core/types.js';
 import { commit, ctxFor, getTrack, itemsOf, markMilestone, newId, saveSprint, saveTrack, state } from '../state.js';
 import { importChanges, plannedCard, roadmapCard } from './roadmap.js';
 import { parseRoadmapInput, type ParseOutcome } from '../core/roadmap-parse.js';
-import { lessonsToParseOutcome, parseTopicImport, topicImportPreview, trackFromImport } from '../core/topic-import.js';
+import { lessonsToRoadmapText, parseTopicImport, topicImportPreview, type ImportedTopic } from '../core/topic-import.js';
 import { costPrefs } from '../core/roadmap.js';
 import { esc, toast } from '../ui.js';
 import { colorDot, dots7, heat, restDaysText, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
@@ -143,83 +143,98 @@ function weekdayPicker(selected: number[]): string {
 function topicImportPanel(): string {
   return `<fieldset class="card topic-import">
     <legend>Import danh sách topic từ JSON</legend>
-    <p class="muted small">Dán JSON hoặc chọn file .json: một topic hoặc một mảng topic, mỗi topic kèm danh sách bài học. Việc sao lưu/khôi phục toàn bộ dữ liệu nằm ở mục <a href="#/settings">Cài đặt</a>, khác với import này.</p>
+    <p class="muted small">Dán JSON hoặc chọn file .json: một topic hoặc một mảng topic, mỗi topic kèm danh sách bài học. App chỉ điền sẵn form bên dưới; topic chưa được lưu cho đến khi bạn bấm Tạo topic. Việc sao lưu/khôi phục toàn bộ dữ liệu nằm ở mục <a href="#/settings">Cài đặt</a>, khác với import này.</p>
     <div class="row gap wrap"><label class="btn file-btn">Chọn file JSON<input type="file" accept="application/json,.json" data-topic-file hidden></label></div>
     <label class="field"><span>Hoặc dán JSON</span><textarea data-topic-json rows="8" spellcheck="false" placeholder="${esc('{ "title": "Kubernetes căn bản", "lessons": [{ "title": "Tổng quan", "url": "https://..." }] }')}"></textarea></label>
     <div class="topic-import-preview" data-topic-preview></div>
     <p class="err" data-topic-err role="alert"></p>
-    <button type="button" class="btn primary" data-topic-import disabled>Thêm topic</button>
   </fieldset>
   <p class="or-split">hoặc nhập tay bên dưới</p>`;
 }
 
-async function applyTopicImport(root: HTMLElement, text: string): Promise<void> {
-  const err = root.querySelector<HTMLElement>('[data-topic-err]')!;
-  const parsed = parseTopicImport(text);
-  if (!parsed.ok) { err.textContent = parsed.error; return; }
-  const d = today();
-  const startLen = state.tracks.length;
-  let addedLessons = 0;
-  let addedSprints = 0;
-  let firstId = '';
-  for (const [i, topic] of parsed.topics.entries()) {
-    const track = trackFromImport(topic, { id: newId(), color: COLORS[(startLen + i) % COLORS.length], createdAt: d });
-    if (!firstId) firstId = track.id;
-    if (topic.lessons.length) {
-      const x = importChanges(track, lessonsToParseOutcome(topic.lessons), {
-        weeks: 3, plan: true, replace: false,
-        sessionMinutes: costPrefs(track).sessionMinutes,
-        itemsPerSession: costPrefs(track).itemsPerSession,
-      });
-      await saveTrack(x.track);
-      await commit(x.newItems, x.changes?.create ?? []);
-      addedLessons += x.newItems.length;
-      addedSprints += x.changes?.create.length ?? 0;
-    } else {
-      await saveTrack(track);
-    }
+function fillTopicForm(form: HTMLFormElement, topic: ImportedTopic): void {
+  const f = (n: string) => form.elements.namedItem(n) as HTMLInputElement | null;
+  f('name')!.value = topic.title;
+  (form.elements.namedItem('why') as HTMLTextAreaElement).value = topic.description;
+  f('tiny')!.value = topic.tinyAction;
+  f('plan')!.value = topic.plan;
+  f('target')!.value = String(topic.weeklyTarget);
+  form.querySelectorAll<HTMLInputElement>('[name="rest"]').forEach((c) => {
+    c.checked = topic.restDays.includes(Number(c.value));
+  });
+  if (topic.color) {
+    const match = [...form.querySelectorAll<HTMLInputElement>('[name="color"]')].find((c) => c.value.toLowerCase() === topic.color!.toLowerCase());
+    if (match) match.checked = true;
   }
-  const n = parsed.topics.length;
-  const lessonBit = addedLessons ? `, ${addedLessons} bài học` : '';
-  const sprintBit = addedSprints ? ` và ${addedSprints} sprint` : '';
-  toast(`Đã thêm ${n} topic${lessonBit}${sprintBit}.`);
-  location.hash = n === 1 ? `#/t/${firstId}` : '#/';
+  const rm = form.elements.namedItem('roadmap') as HTMLTextAreaElement | null;
+  if (rm) {
+    rm.value = lessonsToRoadmapText(topic.lessons);
+    rm.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const sp = topic.sprint;
+  if (f('sprint')) f('sprint')!.value = sp?.title ?? '';
+  if (f('deliverable')) f('deliverable')!.value = sp?.deliverable ?? '';
+  if (sp?.start && f('start')) f('start')!.value = sp.start;
+  if (sp?.weeks) {
+    const w = form.querySelector<HTMLInputElement>(`[name="weeks"][value="${sp.weeks}"]`);
+    if (w) w.checked = true;
+  }
+  const ms = form.elements.namedItem('milestones') as HTMLTextAreaElement | null;
+  if (ms) ms.value = sp?.milestones.join('\n') ?? '';
+  const box = form.querySelector<HTMLElement>('.first-sprint');
+  if (box) {
+    const hasSprint = !!(sp && (sp.title || sp.deliverable || sp.start || sp.weeks || sp.milestones.length));
+    if (hasSprint) box.hidden = false;
+  }
 }
 
-function bindTopicImport(root: HTMLElement): void {
+function bindTopicImport(root: HTMLElement, form: HTMLFormElement): void {
   const area = root.querySelector<HTMLTextAreaElement>('[data-topic-json]');
   const preview = root.querySelector<HTMLElement>('[data-topic-preview]');
   const err = root.querySelector<HTMLElement>('[data-topic-err]');
-  const btn = root.querySelector<HTMLButtonElement>('[data-topic-import]');
   const file = root.querySelector<HTMLInputElement>('[data-topic-file]');
-  if (!area || !preview || !err || !btn) return;
+  if (!area || !preview || !err) return;
 
   const refresh = (): void => {
     const text = area.value.trim();
     if (!text) {
       preview.innerHTML = '';
       err.textContent = '';
-      btn.disabled = true;
-      btn.textContent = 'Thêm topic';
       return;
     }
     const parsed = parseTopicImport(text);
     if (!parsed.ok) {
       preview.innerHTML = '';
       err.textContent = parsed.error;
-      btn.disabled = true;
-      btn.textContent = 'Thêm topic';
       return;
     }
     err.textContent = '';
     const p = topicImportPreview(parsed.topics);
     const head = p.lessonCount
-      ? `Sẽ thêm ${p.topicCount} topic, tổng ${p.lessonCount} bài học.`
-      : `Sẽ thêm ${p.topicCount} topic.`;
-    const plan = p.lessonCount ? '<p class="small muted">App sẽ tự chia bài học thành các sprint 3 tuần. Bạn có thể sửa sau.</p>' : '';
-    preview.innerHTML = `<p><b>${esc(head)}</b></p><ul class="topic-import-list">${p.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${plan}`;
-    btn.disabled = false;
-    btn.textContent = p.topicCount === 1 ? 'Thêm topic này' : `Thêm ${p.topicCount} topic`;
+      ? `Đã nhận ${p.topicCount} topic, tổng ${p.lessonCount} bài học. Chưa lưu gì.`
+      : `Đã nhận ${p.topicCount} topic. Chưa lưu gì.`;
+    const hint = '<p class="small muted">Điền vào form bên dưới, sửa nếu cần, rồi bấm Tạo topic.</p>';
+    const actions = parsed.topics.map((_topic, i) =>
+      `<li><span>${esc(p.lines[i])}</span> <button type="button" class="btn small" data-topic-fill="${i}">Điền vào form</button></li>`).join('');
+    preview.innerHTML = `<p><b>${esc(head)}</b></p><ul class="topic-import-list topic-import-actions">${actions}</ul>${hint}`;
+  };
+
+  preview.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-topic-fill]');
+    if (!btn) return;
+    const parsed = parseTopicImport(area.value);
+    if (!parsed.ok) { err.textContent = parsed.error; return; }
+    const topic = parsed.topics[Number(btn.dataset.topicFill)];
+    if (!topic) return;
+    fillTopicForm(form, topic);
+    toast('Đã điền form. Bạn sửa rồi bấm Tạo topic khi sẵn sàng.');
+    focusName();
+  });
+
+  const focusName = () => {
+    const name = form.elements.namedItem('name') as HTMLInputElement | null;
+    name?.focus();
+    form.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
 
   area.addEventListener('input', refresh);
@@ -231,11 +246,9 @@ function bindTopicImport(root: HTMLElement): void {
       refresh();
     } catch {
       err.textContent = 'Không đọc được file. Hãy chọn một file .json.';
-      btn.disabled = true;
     }
     file.value = '';
   });
-  btn.addEventListener('click', () => void applyTopicImport(root, area.value));
 }
 
 export function trackEditor(id?: string): View {
@@ -288,8 +301,8 @@ export function trackEditor(id?: string): View {
     title: t ? 'Sửa topic' : 'Thêm topic học mới',
     html,
     mount(root) {
-      if (!t) bindTopicImport(root);
       const form = root.querySelector<HTMLFormElement>('.track-form')!;
+      if (!t) bindTopicImport(root, form);
       const f = (n: string) => form.elements.namedItem(n) as HTMLInputElement | null;
       root.querySelectorAll<HTMLElement>('[data-tpl]').forEach((b) =>
         b.addEventListener('click', () => {
@@ -302,15 +315,17 @@ export function trackEditor(id?: string): View {
       );
       const rmText = form.elements.namedItem('roadmap') as HTMLTextAreaElement | null;
       const rmParse = (): ParseOutcome | null => { try { return rmText?.value.trim() ? parseRoadmapInput(rmText.value) : null; } catch { return null; } };
+      const sprintDrafted = () => !!(f('sprint')?.value.trim() || f('deliverable')?.value.trim() || (form.elements.namedItem('milestones') as HTMLTextAreaElement | null)?.value.trim());
       rmText?.addEventListener('input', () => {
         const r = rmParse();
         const sum = root.querySelector('.rm-quick-sum')!;
         const n = r?.items.length ?? 0;
         let msg = 'App sẽ tách thành từng mục, chia thành các sprint 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.';
         if (rmText.value.trim() && !n) { try { parseRoadmapInput(rmText.value); msg = 'Chưa nhận ra mục nào.'; } catch (x) { msg = (x as Error).message; } }
-        if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Khi tạo topic, app chia luôn thành các sprint 3 tuần; phần "Sprint đầu tiên" bên dưới không cần điền.`;
+        if (n && sprintDrafted()) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Phần Sprint đầu tiên vẫn giữ để bạn sửa; nếu để trống, app sẽ tự chia sprint 3 tuần.`;
+        else if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Khi tạo topic, app chia luôn thành các sprint 3 tuần; phần "Sprint đầu tiên" bên dưới không cần điền.`;
         sum.textContent = msg;
-        root.querySelector<HTMLElement>('.first-sprint')!.hidden = n > 0;
+        root.querySelector<HTMLElement>('.first-sprint')!.hidden = n > 0 && !sprintDrafted();
       });
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -335,9 +350,9 @@ export function trackEditor(id?: string): View {
           createdAt: t?.createdAt ?? d,
           demo: t?.demo,
         };
-        let sprint: Sprint | null = null;
         const rm = !t ? rmParse() : null;
-        if (rm && rm.items.length) {
+        const manual = !t && sprintDrafted();
+        if (rm && rm.items.length && !manual) {
           const x = importChanges(track, rm, { weeks: 3, plan: true, replace: false, sessionMinutes: costPrefs(track).sessionMinutes, itemsPerSession: costPrefs(track).itemsPerSession });
           await saveTrack(track);
           await commit(x.newItems, x.changes?.create ?? []);
@@ -345,17 +360,25 @@ export function trackEditor(id?: string): View {
           location.hash = `#/t/${track.id}`;
           return;
         }
-        if (!t) {
+        let sprint: Sprint | null = null;
+        if (!t && manual) {
           const title = f('sprint')!.value.trim();
           const ms = (form.elements.namedItem('milestones') as HTMLTextAreaElement).value.split('\n').map((x) => x.trim()).filter(Boolean);
-          if (title || ms.length) {
-            const start = f('start')!.value || d;
-            const weeks = Number(form.querySelector<HTMLInputElement>('[name="weeks"]:checked')?.value ?? 3);
-            sprint = {
-              id: newId(), trackId: track.id, title: title || 'Sprint đầu tiên', deliverable: f('deliverable')!.value.trim(), start, end: defaultEnd(start, weeks),
-              milestones: ms.slice(0, 12).map((text) => ({ id: newId(), text, done: false })), status: 'active',
-            };
-          }
+          const start = f('start')!.value || d;
+          const weeks = Number(form.querySelector<HTMLInputElement>('[name="weeks"]:checked')?.value ?? 3);
+          sprint = {
+            id: newId(), trackId: track.id, title: title || 'Sprint đầu tiên', deliverable: f('deliverable')!.value.trim(), start, end: defaultEnd(start, weeks),
+            milestones: ms.slice(0, 12).map((text) => ({ id: newId(), text, done: false })), status: 'active',
+          };
+        }
+        if (rm && rm.items.length) {
+          const x = importChanges(track, rm, { weeks: 3, plan: false, replace: false, sessionMinutes: costPrefs(track).sessionMinutes, itemsPerSession: costPrefs(track).itemsPerSession });
+          await saveTrack(track);
+          await commit(x.newItems, []);
+          if (sprint) await saveSprint(sprint);
+          toast(`Đã tạo topic với lộ trình ${x.newItems.length} mục${sprint ? ' và sprint đầu tiên' : ''}.`);
+          location.hash = `#/t/${track.id}`;
+          return;
         }
         await saveTrack(track);
         if (sprint) await saveSprint(sprint);
