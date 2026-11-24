@@ -8,7 +8,8 @@ small subtitle `tracking-status` matches the repository name.
   one confirm creates every item and splits the unfinished ones into 2-4 week sprints from the weekly target.
   Items and sprint milestones stay in sync. The roadmap page shows % done (weighted by estimates when given),
   finish dates at the recent pace, at the weekly target and per plan, with the assumptions spelled out, and
-  suggests a re-plan when you fall behind. Edit, reorder and delete items any time.
+  suggests a re-plan when you fall behind. Edit, reorder and delete items any time. A new topic can start from
+  just a list of lessons (text, links or JSON) and be planned later on a drag-and-drop sprint board.
 
 - Learning tracks with 2-4 week sprints, each ending in a concrete deliverable and a few milestones.
 - A smallest step that still counts: one tap on Today logs it, and the "Ghi nhanh" button (or the G key) logs
@@ -47,16 +48,38 @@ Demo data is generated on demand by `src/core/demo.ts` relative to today, flagge
 from Settings without touching real records. It is used for trying the app and for screenshots.
 
 
-## Import topics from JSON
+## Import a lesson list (new topic)
 
 This is separate from Settings backup import/export (which saves or restores the whole database). On
-"Thêm topic học mới" you can paste JSON or choose a `.json` file that describes one topic or a list of topics,
-each with a lesson list. The app previews the counts and can fill the form (name, why, daily plan, lesson list,
-and sprint fields when present). Nothing is saved until you click "Tạo topic" and you can edit the form first.
-If the file has several topics, fill and submit them one at a time. A sample file is at
-[docs/topic-import.sample.json](docs/topic-import.sample.json).
+"Thêm topic học mới", the box "Nhập nhanh danh sách bài học" takes pasted text or a `.json`, `.txt`, `.md` or
+`.csv` file. Only the lessons are needed; the topic name, phases, estimates, schedule and sprints are all
+optional and can be set up later. The app shows a preview (lesson count, phases, the first lessons) and
+"Điền vào form" fills the form. Nothing is saved until you click "Tạo topic", and you can edit the form first.
+If the input has several topics, fill and submit them one at a time.
 
-Accepted shapes: a single topic object, an array of topics, or `{ "topics": [ ... ] }`.
+When creating a topic with lessons you choose how sprints are made: "Để tôi tự xếp sprint" (no sprint yet;
+the sprint planner opens with every lesson in "Chưa xếp"), "Tự chia sprint 3 tuần" (default) or "Mỗi phần
+một sprint". When the input or the form already describes a first sprint, that sprint is used instead.
+
+Accepted inputs, from the smallest:
+
+- Plain text, one lesson per line. A line that is only a URL becomes a lesson named after the link; a line with
+  a URL keeps it as the lesson link. `# heading` lines are phases. Markdown lists, numbered lists, `(45m)`
+  estimates and CSV with a `title`/`tên` column work as in the roadmap import.
+- A JSON array of strings or of lesson objects:
+  [docs/topic-import.minimal.json](docs/topic-import.minimal.json)
+
+  ```json
+  ["Bài 1: Tổng quan khoá học", "Bài 2: Cài đặt công cụ",
+   { "title": "Bài 3: Bài tập đầu tiên", "url": "https://example.com/bai-3" },
+   "https://example.com/bai-hoc/tong-ket"]
+  ```
+
+- `{ "lessons": [...] }` or `{ "title": "...", "lessons": [...] }`, optionally with nested phases:
+  `{ "title": "...", "phases": [{ "title": "Phần 1", "lessons": ["...", "..."] }] }` (`sections`, `modules`
+  work too).
+- The full topic shape, a list of topics, or `{ "topics": [ ... ] }` (the format of earlier versions and of
+  [docs/topic-import.sample.json](docs/topic-import.sample.json); still accepted unchanged):
 
 ```json
 {
@@ -82,11 +105,25 @@ Accepted shapes: a single topic object, an array of topics, or `{ "topics": [ ..
 }
 ```
 
-Aliases: `name` for `title`, `why` for `description`, `items` for `lessons`, `link` for `url`. `estimate` may
-also be a number of minutes. Optional sprint fields may be a `sprint` object or top-level `sprintTitle`,
-`deliverable`, `start` (YYYY-MM-DD), `weeks` (2, 3 or 4) and `milestones`. A Settings backup (`app: "nhip"`) is
-rejected here with a pointer to Settings. Invalid JSON and missing titles get a Vietnamese error; the form is
-not filled and nothing is saved.
+Aliases: topic `name` for `title`, `why` for `description`, `items` for `lessons`; lesson `name`/`text`/`label`
+for `title`, `link`/`href` for `url`, `section`/`module`/`chapter` for `phase`, `minutes`/`duration` (minutes) or
+`sessions` for `estimate`; `estimate` may also be a number of minutes. Optional sprint fields may be a `sprint`
+object or top-level `sprintTitle`, `deliverable`, `start` (YYYY-MM-DD), `weeks` (2, 3 or 4) and `milestones`.
+Links must be `http(s)`. A Settings backup (`app: "nhip"`) is rejected here with a pointer to Settings. Invalid
+JSON, a lesson that is not text or an object, or an empty list get a Vietnamese error naming the place; the
+form is not filled and nothing is saved.
+
+## Roadmap and sprint planner
+
+- Roadmap ("Lộ trình"): phases are collapsible; only the phase you are studying is open at first ("Mở tất cả" /
+  "Thu gọn" toggle all). The sticky toolbar searches lesson and phase names, filters by status (Tất cả, Chưa xong,
+  Đã xong) and sprint (running, a planned sprint, not in a sprint) and jumps to a phase.
+- Sprint planner ("Kế hoạch sprint"): a board with "Chưa xếp" (lessons in no sprint) and collapsible sprint
+  cards. Drag a lesson by its grip into any sprint, a collapsed sprint, or back to "Chưa xếp", and to reorder
+  inside a sprint. Tick several lessons (or a phase group) and drag one: the whole selection moves. Without a
+  mouse: the ⇄ button on each lesson opens "Chuyển tới…" (arrow keys, Enter, Escape), Alt+↑/↓ reorders the
+  focused lesson, and the bar on top moves the selection. Presets (2/3/4 weeks per sprint, one sprint per phase)
+  only produce a draft; nothing is saved until "Lưu kế hoạch".
 
 ## Run locally
 
@@ -128,8 +165,15 @@ src/db.ts      IndexedDB persistence
 src/state.ts   in-memory state with write-through saves, import preview and merge/replace
 tests/         node:test unit tests
 scripts/       screenshot, smoke test and overflow audit script
-docs/          design notes
+docs/          design notes, topic import samples (full and minimal)
 ```
+
+## Dependencies
+
+One runtime dependency: [SortableJS](https://github.com/SortableJS/Sortable) 1.15.7 (MIT, no framework) for drag
+and drop in the sprint planner. It is loaded on demand when the planner opens (a separate ~12.7 kB gzip chunk);
+if it cannot load (offline before the first visit), the planner still works through the ⇄ menu and the
+selection bar.
 
 ## License
 

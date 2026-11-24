@@ -248,7 +248,9 @@ only when the roadmap has phases): one sprint per run of consecutive items with 
 effort. Presets only produce a draft; the running sprint keeps its identity and start day and takes the first part.
 
 Free-form editing (`src/core/plan-edit.ts`, `#/t/:id/plan`). The planner opens on the open sprints of the track
-(running first, then planned, with their exact dates) or, when there are none, on a preset. Any sprint may hold any
+(running first, then planned, with their exact dates) or, when there are none, on an empty board with every
+lesson in "Chưa xếp" and three starts: an empty sprint, "Mỗi phần một sprint" (when there are phases) or "Chia 3
+tuần / sprint". Any sprint may hold any
 items in any order; nothing assumes phases. Operations, all pure and previewed before saving: multi-select items
 (single items, a phase group inside a sprint, or a whole sprint) and move them to any sprint, to a new sprint, or
 back to the "Chưa xếp vào sprint nào" pool; reorder items inside a sprint; reorder, split (at the first selected
@@ -256,6 +258,29 @@ item, else in half), merge with the next, add an empty sprint, delete a sprint (
 are never removed from the roadmap); rename; set a start day and a length of 1-8 weeks (the 2-4 week advice stays a
 soft warning; overlaps are flagged and "Xếp ngày nối tiếp" chains the dates again). A title left automatic follows
 the items (the phase name when the sprint holds one phase).
+
+Board and drag and drop (scouted 2026-11-24, Asia/Saigon). Layout follows the backlog + cycles pattern of
+Plane (github.com/makeplane/plane, docs.plane.so/core-concepts/cycles; AGPL, used only as a UX reference),
+Linear, Jira and Taiga: a "Chưa xếp" column (sticky on wide screens, searchable over 8 lessons) next to a column
+of collapsible sprint cards (number, editable title, status pill, dates, lesson count, load bar against
+capacity). Library: SortableJS 1.15.7 (MIT, framework-free, touch, cross-list groups, ~12.7 kB gzip, lazy
+loaded). Rejected: @dnd-kit/dom 0.5.3 (framework-agnostic but pre-1.0; the stable @dnd-kit is React only) and
+hand-written HTML5 drag events (no touch, poor ghosts). Sortable runs in fallback mode (pointer events) so
+mouse, pen and touch behave the same (touch needs a 120 ms press so scrolling still works). Sortable only
+reports where a lesson was dropped; the plan itself is changed by the pure, tested `dropItems(drafts, ids, to,
+before)` and the board is re-rendered from the draft, so the DOM never drifts from the data. Dragging a ticked
+lesson moves the whole selection (a "+N" badge shows on the dragged row); collapsed sprints show a drop zone
+while dragging and the sticky footer hides so it cannot cover targets. Keyboard and screen-reader path: every
+lesson has a ⇄ "Chuyển tới…" menu (one shared popover; arrow keys, Home/End, Escape returns focus), Alt+↑/↓
+reorders within a sprint, and the sticky selection bar moves, unplaces or clears the selection. If the chunk
+cannot load (offline before the first visit), the planner still works without drag.
+
+Roadmap page. Phases are `<details>` cards (accordion): on first visit only the phase holding the running
+sprint's next lesson is open, else the first unfinished one; when study moves to another phase it opens too.
+Each summary shows a mini progress bar, done/total and remaining time. A sticky toolbar filters client-side
+(search over lesson and phase names, status, sprint) and jumps to a phase; matching phases open while
+searching. Rows are compact with icon buttons that carry `aria-label` and `title`. 500 items is the import cap,
+so rendering everything stays fast enough; no virtualization is used.
 
 Saving (`saveChanges`). An edited sprint keeps its id, plain milestones and finished milestones; its unfinished
 linked milestones become exactly the draft's items, reusing milestone ids. A deleted open sprint with nothing
@@ -383,6 +408,22 @@ Layout (audited automatically at 360, 390, 768, 1024, 1280 and 1440 px for horiz
 
 Logging speed is unchanged: one-tap "Đã học một chút" on each Today card, "Ghi nhanh" (G) everywhere, and
 "Bấm giờ học" on each card to start the timer for that track with the last-used mode.
+
+### 10.1 Design v2 (2026-11-24)
+
+The owner found the console look monotonous and links styled as underlined text hard to read as actions.
+References viewed on 2026-11-24 (Asia/Saigon): shadcn/ui button variants (ui.shadcn.com/docs/components/button:
+default, secondary, outline, ghost, destructive, link; sizes xs/sm/default/lg/icon), Radix Colors style 12-step
+scales, and the Plane/Linear cycle boards above. Nothing is copied; no CSS framework was added.
+
+- Tokens: indigo accent `#4f46e5` with soft and ink tints, slate neutrals, success/warn/danger soft colors,
+  14 px card radius, one focus ring (2 px accent, 2 px offset) on every interactive element.
+- Type: sans labels in sentence case replace most uppercase mono eyebrows; mono stays for numbers and dates.
+- Buttons: `primary` (filled accent, one per area), default outline, `ghost`, `danger`; sizes `xs`/`small`;
+  square `icon-btn` always has a visible tooltip (`title`) and `aria-label`; a segmented control for filters.
+- Cards, pills (Đang chạy, Đã lên lịch, Mới, Đang học), count badges and empty states with one next step.
+- Mobile (up to 719 px): toolbars wrap into two rows, the planner footer shows one warning line, the selection
+  tip hides, rows keep 36 px+ targets. The flow gradient and beams from section 10 are kept.
 
 ## 11. Study session timer
 

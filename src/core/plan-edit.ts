@@ -219,3 +219,28 @@ export function saveChanges(layout: PlanLayout, track: Track, sprints: Sprint[],
   if (active && !active.closed && !active.added && !active.removed && !active.datesChanged) active = undefined;
   return { save, remove, active };
 }
+
+/**
+ * Drag and drop result: puts `ids` (one dragged item, or every selected item in plan order) into draft `to`
+ * right before item `before` (null = at the end). `to` = -1 drops them back to the unplaced list.
+ * Dropping an item before itself or inside the moved group keeps the position stable.
+ */
+export function dropItems(drafts: EditDraft[], ids: string[], to: number, before: string | null): EditDraft[] {
+  const uniq = ids.filter((x, k) => ids.indexOf(x) === k);
+  if (!uniq.length) return drafts;
+  if (to < 0) return moveItems(drafts, uniq, -1);
+  if (to >= drafts.length) return moveItems(drafts, uniq, drafts.length);
+  const set = new Set(uniq);
+  // Anchor on the first item after `before` that is not being moved.
+  let anchor = before;
+  if (anchor && set.has(anchor)) {
+    const list = drafts[to].itemIds;
+    const k = list.indexOf(anchor);
+    anchor = k < 0 ? null : list.slice(k).find((x) => !set.has(x)) ?? null;
+  }
+  const next = copy(drafts).map((d) => ({ ...d, itemIds: d.itemIds.filter((x) => !set.has(x)) }));
+  const target = next[to].itemIds;
+  const at = anchor ? target.indexOf(anchor) : -1;
+  target.splice(at < 0 ? target.length : at, 0, ...uniq);
+  return next;
+}

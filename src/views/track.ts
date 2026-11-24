@@ -9,6 +9,8 @@ import { importChanges, plannedCard, roadmapCard } from './roadmap.js';
 import { parseRoadmapInput, type ParseOutcome } from '../core/roadmap-parse.js';
 import { lessonsToRoadmapText, parseTopicImport, topicImportPreview, type ImportedTopic } from '../core/topic-import.js';
 import { costPrefs } from '../core/roadmap.js';
+import { layoutPlan, planChanges } from '../core/plan.js';
+import { proposeByPhase } from '../core/plan-edit.js';
 import { esc, toast } from '../ui.js';
 import { colorDot, dots7, heat, restDaysText, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
 
@@ -142,15 +144,21 @@ function weekdayPicker(selected: number[]): string {
 
 function topicImportPanel(): string {
   return `<fieldset class="card topic-import">
-    <legend>Import danh sách topic từ JSON</legend>
-    <p class="muted small">Dán JSON hoặc chọn file .json: một topic hoặc một mảng topic, mỗi topic kèm danh sách bài học. App chỉ điền sẵn form bên dưới; topic chưa được lưu cho đến khi bạn bấm Tạo topic. Việc sao lưu/khôi phục toàn bộ dữ liệu nằm ở mục <a href="#/settings">Cài đặt</a>, khác với import này.</p>
-    <div class="row gap wrap"><label class="btn file-btn">Chọn file JSON<input type="file" accept="application/json,.json" data-topic-file hidden></label></div>
-    <label class="field"><span>Hoặc dán JSON</span><textarea data-topic-json rows="8" spellcheck="false" placeholder="${esc('{ "title": "Kubernetes căn bản", "lessons": [{ "title": "Tổng quan", "url": "https://..." }] }')}"></textarea></label>
-    <div class="topic-import-preview" data-topic-preview></div>
+    <legend>Nhập nhanh danh sách bài học</legend>
+    <p class="muted small">Chỉ cần danh sách bài: mỗi dòng một bài, danh sách link, Markdown (dòng <code>#</code> là tên phần) hoặc JSON. Tên topic, phần, lịch học, sprint đều không bắt buộc; bạn cấu hình sau. App chỉ điền sẵn form bên dưới, chưa lưu gì cho đến khi bạn bấm Tạo topic. Sao lưu/khôi phục toàn bộ dữ liệu nằm ở <a href="#/settings">Cài đặt</a>.</p>
+    <div class="row gap wrap"><label class="btn small file-btn">Chọn file (.json, .txt, .md, .csv)<input type="file" accept="application/json,.json,.txt,.md,.markdown,.csv,text/plain,text/markdown,text/csv" data-topic-file hidden></label>
+      <button type="button" class="btn small ghost" data-topic-sample="list">Xem mẫu: danh sách</button><button type="button" class="btn small ghost" data-topic-sample="json">Xem mẫu: JSON đầy đủ</button></div>
+    <label class="field"><span>Hoặc dán vào đây</span><textarea data-topic-json rows="7" spellcheck="false" placeholder="${esc('Bài 1: Tổng quan\nBài 2: Cài đặt https://...\nhttps://example.com/bai-3')}"></textarea></label>
+    <div class="topic-import-preview" data-topic-preview aria-live="polite"></div>
     <p class="err" data-topic-err role="alert"></p>
   </fieldset>
   <p class="or-split">hoặc nhập tay bên dưới</p>`;
 }
+
+const TOPIC_SAMPLES: Record<string, string> = {
+  list: '# Phần 1: Nền tảng\n- Bài 1: Tổng quan (20m)\n- Bài 2: Cài đặt https://example.com/bai-2\n\n# Phần 2: Thực hành\nhttps://example.com/bai-hoc/bai-tap-dau-tien\n- Bài 4: Tổng kết\n',
+  json: JSON.stringify({ title: 'Kubernetes căn bản', weeklyTarget: 4, phases: [{ title: 'Nền tảng', lessons: ['Tổng quan', { title: 'Pod', url: 'https://kubernetes.io/docs/concepts/workloads/pods/', minutes: 45 }] }, { title: 'Workload', lessons: ['Deployment', 'Service'] }] }, null, 2),
+};
 
 function fillTopicForm(form: HTMLFormElement, topic: ImportedTopic): void {
   const f = (n: string) => form.elements.namedItem(n) as HTMLInputElement | null;
@@ -166,6 +174,8 @@ function fillTopicForm(form: HTMLFormElement, topic: ImportedTopic): void {
     const match = [...form.querySelectorAll<HTMLInputElement>('[name="color"]')].find((c) => c.value.toLowerCase() === topic.color!.toLowerCase());
     if (match) match.checked = true;
   }
+  const plan = form.querySelector<HTMLInputElement>(`[name="autoPlan"][value="${topic.sprint ? 'w3' : 'none'}"]`);
+  if (plan) plan.checked = true;
   const rm = form.elements.namedItem('roadmap') as HTMLTextAreaElement | null;
   if (rm) {
     rm.value = lessonsToRoadmapText(topic.lessons);
@@ -210,13 +220,20 @@ function bindTopicImport(root: HTMLElement, form: HTMLFormElement): void {
     }
     err.textContent = '';
     const p = topicImportPreview(parsed.topics);
-    const head = p.lessonCount
-      ? `Đã nhận ${p.topicCount} topic, tổng ${p.lessonCount} bài học. Chưa lưu gì.`
-      : `Đã nhận ${p.topicCount} topic. Chưa lưu gì.`;
-    const hint = '<p class="small muted">Điền vào form bên dưới, sửa nếu cần, rồi bấm Tạo topic.</p>';
-    const actions = parsed.topics.map((_topic, i) =>
-      `<li><span>${esc(p.lines[i])}</span> <button type="button" class="btn small" data-topic-fill="${i}">Điền vào form</button></li>`).join('');
-    preview.innerHTML = `<p><b>${esc(head)}</b></p><ul class="topic-import-list topic-import-actions">${actions}</ul>${hint}`;
+    const head = parsed.topics.length > 1
+      ? `Nhận ${p.topicCount} topic, tổng ${p.lessonCount} bài học.`
+      : `Nhận ${p.lessonCount} bài học${parsed.format === 'text' ? ' từ văn bản' : ''}.`;
+    const hint = '<p class="small muted">Chưa lưu gì. Bấm "Điền vào form", sửa tuỳ ý rồi bấm Tạo topic.</p>';
+    const actions = parsed.topics.map((tp, i) => {
+      let lastPh = '';
+      const first = tp.lessons.slice(0, 5).map((l) => {
+        const ph = l.phase && l.phase !== lastPh ? `<li class="tip-ph">${esc(l.phase)}</li>` : '';
+        lastPh = l.phase ?? '';
+        return `${ph}<li>${esc(l.title)}${l.url ? ' <span class="muted small">· có link</span>' : ''}</li>`;
+      }).join('');
+      return `<li class="tip-card"><div class="row between wrap"><b>${esc(p.lines[i])}</b><button type="button" class="btn small primary" data-topic-fill="${i}">Điền vào form</button></div>${first ? `<ol class="tip-lessons small">${first}</ol>${tp.lessons.length > 5 ? `<p class="small muted">… và ${tp.lessons.length - 5} bài nữa</p>` : ''}` : ''}</li>`;
+    }).join('');
+    preview.innerHTML = `<p class="ok-text"><b>${esc(head)}</b></p><ul class="topic-import-list topic-import-actions">${actions}</ul>${hint}`;
   };
 
   preview.addEventListener('click', (e) => {
@@ -237,6 +254,12 @@ function bindTopicImport(root: HTMLElement, form: HTMLFormElement): void {
     form.scrollIntoView({ block: 'start', behavior: 'smooth' });
   };
 
+  root.querySelectorAll<HTMLElement>('[data-topic-sample]').forEach((b) => b.addEventListener('click', () => {
+    if (area.value.trim() && !confirm('Thay nội dung đang có bằng mẫu?')) return;
+    area.value = TOPIC_SAMPLES[b.dataset.topicSample!];
+    refresh();
+    area.focus();
+  }));
   area.addEventListener('input', refresh);
   file?.addEventListener('change', async () => {
     const f = file.files?.[0];
@@ -245,7 +268,7 @@ function bindTopicImport(root: HTMLElement, form: HTMLFormElement): void {
       area.value = await f.text();
       refresh();
     } catch {
-      err.textContent = 'Không đọc được file. Hãy chọn một file .json.';
+      err.textContent = 'Không đọc được file. Hãy chọn file .json, .txt, .md hoặc .csv.';
     }
     file.value = '';
   });
@@ -278,7 +301,12 @@ export function trackEditor(id?: string): View {
       </fieldset>
       ${t ? '' : `<fieldset class="card rm-quick"><legend>Lộ trình (không bắt buộc)</legend>
         <label class="field"><span>Có sẵn giáo trình hay danh sách bài? Dán vào đây, mỗi dòng một mục</span><textarea name="roadmap" rows="5" spellcheck="false" placeholder="# Phần 1: Nhập môn&#10;- Bài 1: Giới thiệu (20m)&#10;- Bài 2: Cài đặt (45m)"></textarea></label>
-        <p class="small muted rm-quick-sum">App sẽ tách thành từng mục, chia thành các sprint 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.</p>
+        <p class="small muted rm-quick-sum">App sẽ tách thành từng mục và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.</p>
+        <div class="field rm-autoplan" hidden><span>Sau khi tạo topic</span><div class="seg-inline wrap">
+          <label><input type="radio" name="autoPlan" value="none"><span>Để tôi tự xếp sprint</span></label>
+          <label><input type="radio" name="autoPlan" value="w3" checked><span>Tự chia sprint 3 tuần</span></label>
+          <label><input type="radio" name="autoPlan" value="phase"><span>Mỗi phần một sprint</span></label>
+        </div><p class="small muted">"Tự xếp" mở ngay trang Kế hoạch sprint với bản nháp để bạn kéo thả; chưa có sprint nào được tạo cho đến khi bạn lưu.</p></div>
       </fieldset>`}
       ${t ? '' : `<fieldset class="card first-sprint"><legend>Sprint đầu tiên (2 đến 4 tuần)</legend>
         <label class="field"><span>Tên sprint</span><input name="sprint" maxlength="200" placeholder="Ví dụ: GitOps với Argo CD"></label>
@@ -320,12 +348,13 @@ export function trackEditor(id?: string): View {
         const r = rmParse();
         const sum = root.querySelector('.rm-quick-sum')!;
         const n = r?.items.length ?? 0;
-        let msg = 'App sẽ tách thành từng mục, chia thành các sprint 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.';
+        let msg = 'App sẽ tách thành từng mục và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.';
         if (rmText.value.trim() && !n) { try { parseRoadmapInput(rmText.value); msg = 'Chưa nhận ra mục nào.'; } catch (x) { msg = (x as Error).message; } }
         if (n && sprintDrafted()) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Phần Sprint đầu tiên vẫn giữ để bạn sửa; nếu để trống, app sẽ tự chia sprint 3 tuần.`;
-        else if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Khi tạo topic, app chia luôn thành các sprint 3 tuần; phần "Sprint đầu tiên" bên dưới không cần điền.`;
+        else if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Chọn cách xếp sprint bên dưới; phần "Sprint đầu tiên" không cần điền.`;
         sum.textContent = msg;
         root.querySelector<HTMLElement>('.first-sprint')!.hidden = n > 0 && !sprintDrafted();
+        root.querySelector<HTMLElement>('.rm-autoplan')!.hidden = !n || sprintDrafted();
       });
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -353,10 +382,21 @@ export function trackEditor(id?: string): View {
         const rm = !t ? rmParse() : null;
         const manual = !t && sprintDrafted();
         if (rm && rm.items.length && !manual) {
-          const x = importChanges(track, rm, { weeks: 3, plan: true, replace: false, sessionMinutes: costPrefs(track).sessionMinutes, itemsPerSession: costPrefs(track).itemsPerSession });
+          const mode = form.querySelector<HTMLInputElement>('[name="autoPlan"]:checked')?.value ?? 'w3';
+          const x = importChanges(track, rm, { weeks: 3, plan: mode === 'w3', replace: false, sessionMinutes: costPrefs(track).sessionMinutes, itemsPerSession: costPrefs(track).itemsPerSession });
+          let create = x.changes?.create ?? [];
+          if (mode === 'phase') {
+            const L = layoutPlan(proposeByPhase(x.newItems, track), x.newItems, track, d);
+            create = planChanges(L, track, state.sprints, d, newId).create;
+          }
           await saveTrack(track);
-          await commit(x.newItems, x.changes?.create ?? []);
-          toast(`Đã tạo topic với lộ trình ${x.newItems.length} mục và ${x.changes?.create.length ?? 0} sprint.`);
+          await commit(x.newItems, create);
+          if (mode === 'none') {
+            toast(`Đã tạo topic với lộ trình ${x.newItems.length} mục. Xếp sprint theo ý bạn rồi bấm Lưu.`);
+            location.hash = `#/t/${track.id}/plan`;
+            return;
+          }
+          toast(`Đã tạo topic với lộ trình ${x.newItems.length} mục và ${create.length} sprint.`);
           location.hash = `#/t/${track.id}`;
           return;
         }

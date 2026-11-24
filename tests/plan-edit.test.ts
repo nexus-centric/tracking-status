@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { layoutPlan, proposePlan } from '../src/core/plan.js';
 import {
-  addSprint, chainDates, draftsFromSprints, hasPhases, mergeWithNext, moveItems, moveSprint, moveWithin, proposeByPhase,
+  addSprint, chainDates, draftsFromSprints, dropItems, hasPhases, mergeWithNext, moveItems, moveSprint, moveWithin, proposeByPhase,
   removeSprint, renameSprint, saveChanges, setStart, splitSprint, unplacedIds, withKeys,
 } from '../src/core/plan-edit.js';
 import type { Sprint } from '../src/core/types.js';
@@ -143,4 +143,23 @@ test('a brand-new plan makes its first sprint active; kept planned sprints are n
   assert.ok(ch2.save.every((s) => s.status === 'planned'));
   const unchanged = saveChanges(layoutPlan(draftsFromSprints([planned], list, 't1'), list, t, '2026-11-24'), t, [planned], list, '2026-11-24', newId);
   assert.deepEqual(unchanged.save, [], 'loading and saving without edits writes nothing');
+});
+
+test('drag and drop: one item or a selected group, before an anchor, across sprints, back to the pool', () => {
+  const list = items(8);
+  let d = withKeys([{ weeks: 2, itemIds: ['i1', 'i2', 'i3'] }, { weeks: 2, itemIds: ['i4', 'i5', 'i6'] }]);
+  d = dropItems(d, ['i2'], 1, 'i5'); // drag i2 between i4 and i5
+  assert.deepEqual(d.map((x) => x.itemIds), [['i1', 'i3'], ['i4', 'i2', 'i5', 'i6']]);
+  d = dropItems(d, ['i6'], 1, 'i4'); // reorder inside a sprint: i6 to the top
+  assert.deepEqual(d[1].itemIds, ['i6', 'i4', 'i2', 'i5']);
+  d = dropItems(d, ['i1', 'i7', 'i8'], 0, null); // a group from a sprint and the pool, dropped at the end
+  assert.deepEqual(d[0].itemIds, ['i3', 'i1', 'i7', 'i8']);
+  d = dropItems(d, ['i4', 'i2'], 1, 'i4'); // anchor inside the moved group: next unmoved item is the anchor
+  assert.deepEqual(d[1].itemIds, ['i6', 'i4', 'i2', 'i5']);
+  d = dropItems(d, ['i3'], -1, null);
+  assert.deepEqual(unplacedIds(d, list), ['i3']);
+  d = dropItems(d, ['i3'], 2, null); // past the last sprint: a new sprint
+  assert.equal(d.length, 3);
+  assert.deepEqual(d[2].itemIds, ['i3']);
+  assert.equal(dropItems(d, [], 0, null), d);
 });

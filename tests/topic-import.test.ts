@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { parseRoadmapInput } from '../src/core/roadmap-parse.js';
 import { lessonsToRoadmapText, parseTopicImport, topicImportPreview, trackFromImport } from '../src/core/topic-import.js';
 
@@ -29,7 +29,7 @@ test('parses the documented sample file', () => {
   assert.deepEqual(prev, {
     topicCount: 2,
     lessonCount: 5,
-    lines: ['Kubernetes căn bản — 3 bài học', 'GitOps với Argo CD — 2 bài học'],
+    lines: ['Kubernetes căn bản — 3 bài học, 1 phần', 'GitOps với Argo CD — 2 bài học'],
   });
 });
 
@@ -57,15 +57,16 @@ function importError(text: string): string {
 }
 
 test('returns clear Vietnamese errors for invalid input', () => {
-  assert.match(importError(''), /Chưa có nội dung JSON/);
+  assert.match(importError(''), /Chưa có nội dung/);
   assert.match(importError('{'), /JSON không hợp lệ/);
   assert.match(importError('[]'), /đang trống/);
-  assert.match(importError('123'), /object topic/);
+  assert.match(importError('[1, 2]'), /bài học thứ 1 phải là chuỗi/);
   assert.match(importError(JSON.stringify({ title: '' })), /thiếu "title"/);
   assert.match(importError(JSON.stringify({ title: 'A', weeklyTarget: 0 })), /weeklyTarget/);
   assert.match(importError(JSON.stringify({ title: 'A', lessons: [{ title: '' }] })), /bài học thứ 1/);
+  assert.match(importError(JSON.stringify({ title: 'A', lessons: [{ title: 'B' }, 42] })), /bài học thứ 2/);
+  assert.match(importError(JSON.stringify({ title: 'A', phases: [{ title: 'P1' }] })), /phần "P1"/);
   assert.match(importError(JSON.stringify({ title: 'A', lessons: [{ title: 'B', url: 'javascript:alert(1)' }] })), /http:\/\/ hoặc https:\/\//);
-  assert.match(importError(JSON.stringify([{ title: 'Bài 1', url: 'https://example.com/1' }])), /trông giống một bài học/);
   assert.match(
     importError(JSON.stringify({ app: 'nhip', version: 2, tracks: [], sprints: [], roadmap: [], logs: [], marks: [], reviews: [], settings: {} })),
     /sao lưu/,
@@ -143,4 +144,89 @@ test('lessonsToRoadmapText is understood by the existing roadmap parser', () => 
   assert.deepEqual(parsed.items[1].estimate, { unit: 'min', value: 45 });
   assert.deepEqual(parsed.items[2].estimate, { unit: 'session', value: 1 });
   assert.equal(lessonsToRoadmapText([]), '');
+});
+
+test('lesson-only imports: strings, links, lesson objects, wrappers without a topic name', () => {
+  const strings = parseTopicImport(JSON.stringify(['Bài 1: Tổng quan', 'Bài 2: Cài đặt', 'https://example.com/bai-hoc/quy-khan-cap']));
+  assert.equal(strings.ok, true);
+  if (strings.ok) {
+    assert.equal(strings.topics.length, 1);
+    assert.equal(strings.topics[0].title, '', 'name left for the form');
+    assert.deepEqual(strings.topics[0].lessons.map((l) => l.title), ['Bài 1: Tổng quan', 'Bài 2: Cài đặt', 'Quy khan cap']);
+    assert.equal(strings.topics[0].lessons[2].url, 'https://example.com/bai-hoc/quy-khan-cap');
+    assert.equal(strings.topics[0].weeklyTarget, 4);
+    assert.equal(strings.topics[0].sprint, undefined);
+  }
+  const objs = parseTopicImport(JSON.stringify([{ title: 'Bài 1', url: 'https://example.com/1', minutes: 20 }, { name: 'Bài 2', link: 'https://example.com/2', section: 'Phần B' }, { href: 'https://example.com/ba' }]));
+  assert.equal(objs.ok, true);
+  if (objs.ok) {
+    const l = objs.topics[0].lessons;
+    assert.deepEqual(l[0].estimate, { unit: 'min', value: 20 });
+    assert.equal(l[1].title, 'Bài 2');
+    assert.equal(l[1].phase, 'Phần B');
+    assert.equal(l[2].title, 'Ba');
+  }
+  const wrapped = parseTopicImport(JSON.stringify({ lessons: ['A', 'B'] }));
+  assert.equal(wrapped.ok && wrapped.topics[0].lessons.length, 2);
+  const single = parseTopicImport(JSON.stringify({ title: 'Bài 1', url: 'https://example.com/1' }));
+  assert.equal(single.ok && single.topics[0].lessons[0].title, 'Bài 1');
+  assert.match(importError(JSON.stringify({ title: '' })), /thiếu "title"/);
+});
+
+test('nested phases: [{ title, lessons }] become lessons with a phase', () => {
+  const r = parseTopicImport(JSON.stringify({ title: 'Go', phases: [{ title: 'Nhập môn', lessons: ['Cài Go', { title: 'Hello', minutes: 15 }] }, { name: 'Web', lessons: ['net/http'] }] }));
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.deepEqual(r.topics[0].lessons.map((l) => [l.title, l.phase]), [['Cài Go', 'Nhập môn'], ['Hello', 'Nhập môn'], ['net/http', 'Web']]);
+  assert.deepEqual(topicImportPreview(r.topics).lines, ['Go — 3 bài học, 2 phần']);
+});
+
+test('plain text: markdown list with headings, numbered list, bare links', () => {
+  const r = parseTopicImport('# Phần 1: Nền tảng\n- Bài 1 (20m)\n- Bài 2 https://example.com/b2\n\n# Phần 2\n1. Bài 3\nhttps://example.com/bai-hoc/tong-ket-khoa\n');
+  assert.equal(r.ok, true);
+  if (!r.ok) return;
+  assert.equal(r.format, 'text');
+  const l = r.topics[0].lessons;
+  assert.deepEqual(l.map((x) => x.title), ['Bài 1', 'Bài 2', 'Bài 3', 'Tong ket khoa']);
+  assert.equal(l[0].phase, 'Phần 1: Nền tảng');
+  assert.deepEqual(l[0].estimate, { unit: 'min', value: 20 });
+  assert.equal(l[1].url, 'https://example.com/b2');
+  assert.equal(l[3].url, 'https://example.com/bai-hoc/tong-ket-khoa');
+  assert.equal(l[3].phase, 'Phần 2');
+  const mixed = parseTopicImport('Bài 1: Tổng quan\nBài 2: Cài đặt https://example.com/bai-2\nhttps://example.com/bai-hoc/bai-tap-dau-tien\nBài 4: Tổng kết (30m)');
+  assert.equal(mixed.ok, true);
+  if (mixed.ok) {
+    assert.deepEqual(mixed.topics[0].lessons.map((x) => x.title), ['Bài 1: Tổng quan', 'Bài 2: Cài đặt', 'Bai tap dau tien', 'Bài 4: Tổng kết']);
+    assert.equal(mixed.topics[0].lessons[1].url, 'https://example.com/bai-2');
+    assert.equal(mixed.topics[0].lessons.every((x) => !x.phase), true);
+  }
+  const outline = parseTopicImport('Phần A\n- Bài 1\n- Bài 2\nPhần B\n- Bài 3');
+  assert.equal(outline.ok && outline.topics[0].lessons[2].phase, 'Phần B');
+  const csv = parseTopicImport('title,url\nBài 1,https://example.com/1\nBài 2,');
+  assert.equal(csv.ok && csv.topics[0].lessons.length, 2);
+  const links = parseTopicImport('https://a.example/x/bai-mot\nhttps://a.example/x/bai-hai');
+  assert.equal(links.ok && links.topics[0].lessons.length, 2);
+});
+
+test('backward compatible: the tuhoctaichinh file and the minimal sample', () => {
+  // Same shape as the tuhoctaichinh export: { topics: [{ title, description, tinyAction, weeklyTarget, lessons: [{ title, url, phase, estimate: { unit, value } }] }] }
+  const lessons = Array.from({ length: 311 }, (_, i) => ({ title: `Bài ${i + 1}`, url: `https://example.com/bai-hoc/${i + 1}`, phase: `Chặng ${(i % 27) + 1}: Tên chặng`, estimate: { unit: 'min', value: 6 } }));
+  const big = parseTopicImport(JSON.stringify({ topics: [{ title: 'Tài chính cá nhân', description: 'Mô tả', tinyAction: 'đọc 1 bài', weeklyTarget: 4, lessons }] }));
+  assert.equal(big.ok, true);
+  if (big.ok) {
+    assert.equal(big.format, 'json');
+    assert.equal(big.topics[0].title, 'Tài chính cá nhân');
+    assert.equal(big.topics[0].lessons.length, 311);
+    assert.equal(new Set(big.topics[0].lessons.map((l) => l.phase)).size, 27);
+    assert.deepEqual(big.topics[0].lessons[0].estimate, { unit: 'min', value: 6 });
+  }
+  // Optional real export (not in the repo): TOPIC_IMPORT_FIXTURE=/path/to/file.json npm test
+  const real = process.env.TOPIC_IMPORT_FIXTURE ?? '';
+  if (existsSync(real)) {
+    const r = parseTopicImport(readFileSync(real, 'utf8'));
+    assert.ok(r.ok && r.topics[0].lessons.length > 0);
+  }
+  const min = parseTopicImport(readFileSync('docs/topic-import.minimal.json', 'utf8'));
+  assert.equal(min.ok, true);
+  if (min.ok) assert.ok(min.topics[0].lessons.length >= 3);
 });

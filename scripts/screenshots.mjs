@@ -332,7 +332,7 @@ let roadmapBackup = null;
       await page.waitForSelector('dialog.modal', { state: 'detached' });
     } else {
       await go(page, `#/t/${trackId}/roadmap`, '.ri-list');
-      await page.locator('.ri input[data-act="ri-done"]:not(:checked)').first().check();
+      await page.locator('.rphase[open] .ri input[data-act="ri-done"]:not(:checked)').first().check();
       await page.waitForSelector('.toast .link-btn');
       if (k === 0) checks.itemToast = (await page.textContent('.toast span')).trim();
       await page.click('.toast .link-btn');
@@ -349,6 +349,7 @@ let roadmapBackup = null;
   // Reorder and edit.
   await page.clock.setFixedTime(new Date('2026-11-15T20:00:00+07:00'));
   await go(page, `#/t/${trackId}/roadmap`, '.ri-list');
+  await page.click('[data-rm-all="1"]'); // phases are collapsed except the active one
   const lastTitle = await page.locator('.ri .ri-title').last().textContent();
   await page.locator('.ri [data-act="ri-up"]').last().click();
   await page.waitForTimeout(250);
@@ -381,12 +382,12 @@ let roadmapBackup = null;
   await page.click('[data-preset="w3"]');
   checks.planSprintsProposed = await page.locator('.plan-sprints > li').count();
   // Free-form edit: move the first item of sprint 1 into a new sprint at the end.
-  await page.click('.plan-sprints > li:first-child details summary');
+  // Sprint 1 is expanded by default; tick its first lesson.
   await page.locator('.plan-sprints > li:first-child [data-sel]').first().check();
   await page.selectOption('[data-target]', 'new');
   await page.click('[data-move]');
   await page.waitForTimeout(150);
-  checks.planFoot = (await page.textContent('.plan-foot p')).replace(/\s+/g, ' ').trim();
+  checks.planFoot = (await page.textContent('.plan-foot > div')).replace(/\s+/g, ' ').trim();
   await shot(page, 'plan-sprints-1280');
   page.once('dialog', (dlg) => dlg.accept()); // confirms the change to the running sprint
   await page.click('[data-save]');

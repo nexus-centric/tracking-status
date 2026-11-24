@@ -1,6 +1,6 @@
 // Parse a topic (or a list of topics) plus lesson lists from JSON. This is only for the "add topic"
 // flow; it is not the Settings backup import and not the per-track syllabus paste.
-import type { ParseOutcome } from './roadmap-parse.js';
+import { looksLikeCsv, parseRoadmapInput, type ParseOutcome } from './roadmap-parse.js';
 import type { Day, Estimate, Track } from './types.js';
 
 export const MAX_TOPICS = 50;
@@ -36,7 +36,7 @@ export interface ImportedTopic {
 }
 
 export type TopicImportResult =
-  | { ok: true; topics: ImportedTopic[] }
+  | { ok: true; topics: ImportedTopic[]; format: 'json' | 'text' }
   | { ok: false; error: string };
 
 const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -62,12 +62,6 @@ function looksLikeBackup(v: unknown): boolean {
   return isRecord(v) && v.app === 'nhip' && Array.isArray(v.tracks);
 }
 
-function looksLikeLesson(v: Record<string, unknown>): boolean {
-  const hasLessonList = Array.isArray(v.lessons) || Array.isArray(v.items);
-  const hasUrl = typeof (v.url ?? v.link) === 'string' && String(v.url ?? v.link).trim() !== '';
-  return !hasLessonList && hasUrl;
-}
-
 function parseEstimate(raw: unknown, where: string): { ok: true; value?: Estimate } | { ok: false; error: string } {
   if (raw == null || raw === '') return { ok: true };
   if (typeof raw === 'number') {
@@ -87,19 +81,84 @@ function parseEstimate(raw: unknown, where: string): { ok: true; value?: Estimat
   return { ok: true, value: { unit, value: unit === 'min' ? Math.round(value) : Math.round(value * 10) / 10 } };
 }
 
-function parseLesson(raw: unknown, where: string): { ok: true; lesson: ImportedLesson } | { ok: false; error: string } {
-  if (!isRecord(raw)) return { ok: false, error: `${where} phải là một object, ví dụ { "title": "Bài 1", "url": "https://..." }.` };
-  const title = (str(raw.title) ?? '').trim();
-  if (!title) return { ok: false, error: `${where} thiếu "title".` };
-  if (title.length > LESSON_TITLE_MAX) return { ok: false, error: `${where}: title dài hơn ${LESSON_TITLE_MAX} ký tự.` };
-  const urlRaw = (str(raw.url) ?? str(raw.link) ?? '').trim();
+/** A readable title from a lesson URL: the last path segment with dashes turned into spaces, else the host. */
+export function titleFromUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    const seg = url.pathname.split('/').filter(Boolean).pop() ?? '';
+    let t = decodeURIComponent(seg).replace(/\.(html?|php|aspx?)$/i, '').replace(/[-_+]+/g, ' ').trim();
+    if (!t) t = url.hostname.replace(/^www\./, '');
+    return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, LESSON_TITLE_MAX);
+  } catch {
+    return u.slice(0, LESSON_TITLE_MAX);
+  }
+}
+
+const firstStr = (o: Record<string, unknown>, keys: string[]): string => {
+  for (const k of keys) { const v = str(o[k]); if (v && v.trim()) return v.trim(); }
+  return '';
+};
+
+/**
+ * A lesson is a string ("Bài 1", or just a URL) or an object. Only a title or a URL is needed; aliases:
+ * title|name|text|label, url|link|href, phase|section|module|chapter, estimate|minutes|duration|sessions.
+ */
+function parseLesson(raw: unknown, where: string, phase?: string): { ok: true; lesson: ImportedLesson } | { ok: false; error: string } {
+  if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (!t) return { ok: false, error: `${where} đang trống.` };
+    if (isHttpUrl(t)) return { ok: true, lesson: { title: titleFromUrl(t), url: t, phase } };
+    return { ok: true, lesson: { title: t.slice(0, LESSON_TITLE_MAX), phase } };
+  }
+  if (!isRecord(raw)) return { ok: false, error: `${where} phải là chuỗi (tên bài hoặc link) hoặc object, ví dụ { "title": "Bài 1", "url": "https://..." }.` };
+  const urlRaw = firstStr(raw, ['url', 'link', 'href']);
   if (urlRaw && !isHttpUrl(urlRaw)) {
     return { ok: false, error: `${where}: url phải bắt đầu bằng http:// hoặc https://.` };
   }
-  const phase = (str(raw.phase) ?? '').trim() || undefined;
-  const est = parseEstimate(raw.estimate, where);
+  let title = firstStr(raw, ['title', 'name', 'text', 'label']);
+  if (!title && urlRaw) title = titleFromUrl(urlRaw);
+  if (!title) return { ok: false, error: `${where} thiếu "title" (hoặc "url").` };
+  if (title.length > LESSON_TITLE_MAX) return { ok: false, error: `${where}: title dài hơn ${LESSON_TITLE_MAX} ký tự.` };
+  const ph = firstStr(raw, ['phase', 'section', 'module', 'chapter']) || phase || undefined;
+  let estRaw: unknown = raw.estimate;
+  if (estRaw == null && raw.minutes != null) estRaw = raw.minutes;
+  if (estRaw == null && raw.duration != null) estRaw = raw.duration;
+  if (estRaw == null && typeof raw.sessions === 'number') estRaw = { unit: 'session', value: raw.sessions };
+  const est = parseEstimate(estRaw, where);
   if (!est.ok) return est;
-  return { ok: true, lesson: { title: title.slice(0, LESSON_TITLE_MAX), url: urlRaw || undefined, phase, estimate: est.value } };
+  return { ok: true, lesson: { title: title.slice(0, LESSON_TITLE_MAX), url: urlRaw || undefined, phase: ph, estimate: est.value } };
+}
+
+/** Lessons from a flat list, or from phases: [{ "title": "Phần 1", "lessons": [...] }]. */
+function parseLessonList(raw: Record<string, unknown>, where: string): { ok: true; value: ImportedLesson[] } | { ok: false; error: string } {
+  const out: ImportedLesson[] = [];
+  const flat = raw.lessons ?? raw.items;
+  if (flat != null && !Array.isArray(flat)) return { ok: false, error: `${where}: "lessons" phải là một mảng.` };
+  const phases = raw.phases ?? raw.sections ?? raw.modules;
+  if (phases != null && !Array.isArray(phases)) return { ok: false, error: `${where}: "phases" phải là một mảng, mỗi phần có "title" và "lessons".` };
+  if (Array.isArray(phases)) {
+    for (let p = 0; p < phases.length; p++) {
+      const ph = phases[p];
+      if (!isRecord(ph)) return { ok: false, error: `${where}, phần thứ ${p + 1} phải là object { "title": "...", "lessons": [...] }.` };
+      const name = firstStr(ph, ['title', 'name', 'phase']) || `Phần ${p + 1}`;
+      const list = ph.lessons ?? ph.items;
+      if (!Array.isArray(list)) return { ok: false, error: `${where}, phần "${name}": "lessons" phải là một mảng.` };
+      for (let i = 0; i < list.length; i++) {
+        const l = parseLesson(list[i], `${where}, phần "${name}", bài thứ ${i + 1}`, name.slice(0, 200));
+        if (!l.ok) return l;
+        out.push(l.lesson);
+      }
+    }
+  }
+  if (Array.isArray(flat)) {
+    for (let i = 0; i < flat.length; i++) {
+      const l = parseLesson(flat[i], `${where}, bài học thứ ${i + 1}`);
+      if (!l.ok) return l;
+      out.push(l.lesson);
+    }
+  }
+  if (out.length > MAX_LESSONS) return { ok: false, error: `${where}: mỗi topic tối đa ${MAX_LESSONS} bài học.` };
+  return { ok: true, value: out };
 }
 
 function parseRestDays(raw: unknown, where: string): { ok: true; value: number[] } | { ok: false; error: string } {
@@ -158,7 +217,6 @@ function parseSprintPrefill(raw: Record<string, unknown>, where: string): { ok: 
 function parseTopic(raw: unknown, where: string): { ok: true; topic: ImportedTopic } | { ok: false; error: string } {
   if (!isRecord(raw)) return { ok: false, error: `${where} phải là một object topic, ví dụ { "title": "...", "lessons": [...] }.` };
   const title = (str(raw.title) ?? str(raw.name) ?? '').trim();
-  if (!title) return { ok: false, error: `${where} thiếu "title" (hoặc "name").` };
   if (title.length > TOPIC_TITLE_MAX) return { ok: false, error: `${where}: title dài hơn ${TOPIC_TITLE_MAX} ký tự.` };
   const weeklyRaw = raw.weeklyTarget;
   let weeklyTarget = 4;
@@ -175,30 +233,11 @@ function parseTopic(raw: unknown, where: string): { ok: true; topic: ImportedTop
   }
   const colorRaw = (str(raw.color) ?? '').trim();
   if (colorRaw && !HEX.test(colorRaw)) return { ok: false, error: `${where}: color phải là mã hex, ví dụ #2f5bea.` };
-  const lessonsRaw = raw.lessons ?? raw.items;
-  if (lessonsRaw == null) {
-    // A bare { title, url } in a list is almost certainly a lesson, not a topic.
-    if (looksLikeLesson(raw)) {
-      return {
-        ok: false,
-        error: `${where} trông giống một bài học (có url/link, không có lessons). Hãy bọc danh sách bài trong một topic: { "title": "...", "lessons": [ ... ] }.`,
-      };
-    }
-  }
-  if (lessonsRaw != null && !Array.isArray(lessonsRaw)) {
-    return { ok: false, error: `${where}: "lessons" phải là một mảng.` };
-  }
-  const lessons: ImportedLesson[] = [];
-  if (Array.isArray(lessonsRaw)) {
-    if (lessonsRaw.length > MAX_LESSONS) {
-      return { ok: false, error: `${where}: mỗi topic tối đa ${MAX_LESSONS} bài học.` };
-    }
-    for (let i = 0; i < lessonsRaw.length; i++) {
-      const lesson = parseLesson(lessonsRaw[i], `${where}, bài học thứ ${i + 1}`);
-      if (!lesson.ok) return lesson;
-      lessons.push(lesson.lesson);
-    }
-  }
+  const parsedLessons = parseLessonList(raw, where);
+  if (!parsedLessons.ok) return parsedLessons;
+  const lessons = parsedLessons.value;
+  // The name is optional when there are lessons: the form asks for it before saving.
+  if (!title && !lessons.length) return { ok: false, error: `${where} thiếu "title" (hoặc "name") và chưa có bài học nào.` };
   const sprint = parseSprintPrefill(raw, where);
   if (!sprint.ok) return sprint;
   return {
@@ -217,8 +256,15 @@ function parseTopic(raw: unknown, where: string): { ok: true; topic: ImportedTop
   };
 }
 
+const TOPIC_KEYS = ['lessons', 'items', 'phases', 'sections', 'modules', 'weeklyTarget', 'tinyAction', 'restDays', 'sprint', 'description', 'why'];
+const isTopicLike = (v: unknown) => isRecord(v) && TOPIC_KEYS.some((k) => k in v);
+
 function unwrap(data: unknown): { ok: true; list: unknown[] } | { ok: false; error: string } {
-  if (Array.isArray(data)) return { ok: true, list: data };
+  if (Array.isArray(data)) {
+    // A plain list (strings, or objects that are not topics) is the lesson list of one unnamed topic.
+    if (data.length && !data.some(isTopicLike)) return { ok: true, list: [{ lessons: data }] };
+    return { ok: true, list: data };
+  }
   if (!isRecord(data)) {
     return { ok: false, error: 'JSON phải là một object topic, một mảng các topic, hoặc { "topics": [ ... ] }.' };
   }
@@ -228,7 +274,9 @@ function unwrap(data: unknown): { ok: true; list: unknown[] } | { ok: false; err
   if (Array.isArray(data.topics)) return { ok: true, list: data.topics };
   if (isRecord(data.topic)) return { ok: true, list: [data.topic] };
   // A single topic object (with or without lessons). An empty title still counts, so parseTopic can explain.
-  if ('title' in data || 'name' in data || Array.isArray(data.lessons) || Array.isArray(data.items)) {
+  // A single { title, url } without topic fields is one lesson.
+  if (!isTopicLike(data) && typeof (data.url ?? data.link ?? data.href) === 'string') return { ok: true, list: [{ lessons: [data] }] };
+  if ('title' in data || 'name' in data || isTopicLike(data)) {
     return { ok: true, list: [data] };
   }
   return { ok: false, error: 'JSON phải là một object topic, một mảng các topic, hoặc { "topics": [ ... ] }. Mỗi topic cần có "title".' };
@@ -237,7 +285,8 @@ function unwrap(data: unknown): { ok: true; list: unknown[] } | { ok: false; err
 /** Parse and validate topic-import JSON. Never throws. */
 export function parseTopicImport(text: string): TopicImportResult {
   const raw = text.trim();
-  if (!raw) return { ok: false, error: 'Chưa có nội dung JSON. Hãy dán JSON hoặc chọn một file .json.' };
+  if (!raw) return { ok: false, error: 'Chưa có nội dung. Hãy dán danh sách bài học (JSON, mỗi dòng một bài, hoặc danh sách link) hoặc chọn file.' };
+  if (!/^[[{]/.test(raw)) return parseLessonText(raw);
   let data: unknown;
   try {
     data = JSON.parse(raw);
@@ -255,14 +304,49 @@ export function parseTopicImport(text: string): TopicImportResult {
     if (!t.ok) return t;
     topics.push(t.topic);
   }
-  return { ok: true, topics };
+  return { ok: true, topics, format: 'json' };
+}
+
+/**
+ * Plain text: a Markdown or numbered list, one lesson per line, headings as phases, CSV, or bare links.
+ * A line that is only a URL becomes a lesson named after the URL (the roadmap parser would read it as a heading).
+ */
+export function parseLessonText(text: string): TopicImportResult {
+  if (looksLikeCsv(text)) return fromOutline(text);
+  const BULLET = /^\s*(?:[-*+]|\d+[.)])\s+/;
+  const raw = text.split(/\r?\n/);
+  // A plain list (no bullets anywhere) is one lesson per line; only "#" lines are phase names then.
+  const plain = !raw.some((l) => BULLET.test(l) && !isHttpUrl(l.replace(BULLET, '').trim()));
+  const lines = raw.map((l) => {
+    const t = l.trim().replace(BULLET, '');
+    if (isHttpUrl(t)) return `- ${titleFromUrl(t)} ${t}`;
+    if (!t || t.startsWith('#') || BULLET.test(l)) return l;
+    // A plain line that carries a link is a lesson, not a heading.
+    return plain || /https?:\/\//.test(t) ? `- ${t}` : l;
+  });
+  return fromOutline(lines.join('\n'));
+}
+
+function fromOutline(text: string): TopicImportResult {
+  let r: ParseOutcome;
+  try {
+    r = parseRoadmapInput(text);
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+  if (!r.items.length) return { ok: false, error: 'Chưa nhận ra bài học nào. Mỗi dòng một bài, có thể kèm link; dòng bắt đầu bằng # là tên phần.' };
+  if (r.items.length > MAX_LESSONS) return { ok: false, error: `Mỗi topic tối đa ${MAX_LESSONS} bài học.` };
+  const lessons: ImportedLesson[] = r.items.map((i) => ({ title: i.title.slice(0, LESSON_TITLE_MAX), url: i.link, phase: i.phase, estimate: i.estimate }));
+  return { ok: true, format: 'text', topics: [{ title: '', description: '', tinyAction: '', plan: '', weeklyTarget: 4, restDays: [], lessons }] };
 }
 
 export function topicImportPreview(topics: ImportedTopic[]): { topicCount: number; lessonCount: number; lines: string[] } {
   const lessonCount = topics.reduce((n, t) => n + t.lessons.length, 0);
   const lines = topics.map((t) => {
     const n = t.lessons.length;
-    return n ? `${t.title} — ${n} bài học` : `${t.title} — chưa có bài học`;
+    const phases = new Set(t.lessons.map((l) => l.phase).filter(Boolean)).size;
+    const name = t.title || 'Topic chưa đặt tên';
+    return n ? `${name} — ${n} bài học${phases ? `, ${phases} phần` : ''}` : `${name} — chưa có bài học`;
   });
   return { topicCount: topics.length, lessonCount, lines };
 }
