@@ -47,7 +47,7 @@ export function dots7(ctx: Ctx): string {
 
 export function weekBar(ctx: Ctx): string {
   const w = weekResult(ctx, weekStart(ctx.today));
-  if (w.state === 'paused') return `<div class="weekbar muted">Tuần này việc học đang tạm dừng</div>`;
+  if (w.state === 'paused') return `<div class="weekbar muted">Tuần này topic đang tạm dừng</div>`;
   const segs = Array.from({ length: Math.max(w.target, w.done) }, (_, i) => `<span class="seg ${i < w.done ? 'on' : ''}"></span>`).join('');
   let note = '';
   if (w.state === 'met') note = w.done > w.target ? `vượt ${w.done - w.target} ngày` : 'đã đạt';
@@ -58,16 +58,16 @@ export function weekBar(ctx: Ctx): string {
 
 export function sprintBar(s: Sprint, today: Day): string {
   const p = sprintProgress(s, today);
-  return `<div class="sbar" role="img" aria-label="${p.done}/${p.total} mốc, đã qua ${Math.round(p.timePct * 100)}% thời gian">
+  return `<div class="sbar" role="img" aria-label="${p.done}/${p.total} milestone, đã qua ${Math.round(p.timePct * 100)}% thời gian">
     <div class="sbar-fill" style="width:${(p.pct * 100).toFixed(1)}%"><i class="beam" aria-hidden="true"></i></div>
-    ${s.status === 'active' ? `<div class="sbar-time" style="left:${(p.timePct * 100).toFixed(1)}%" title="Hôm nay, theo lịch của đợt học"></div>` : ''}
+    ${s.status === 'active' ? `<div class="sbar-time" style="left:${(p.timePct * 100).toFixed(1)}%" title="Hôm nay, theo lịch của sprint"></div>` : ''}
   </div>`;
 }
 
 export function sprintMeta(s: Sprint, today: Day): string {
   const p = sprintProgress(s, today);
   const left = s.status === 'active' && p.pace !== 'overdue' ? ` · còn ${p.daysLeft} ngày` : '';
-  return `<span class="pace p-${p.pace}">${PACE_LABEL[p.pace]}</span> <span class="muted">${p.done}/${p.total} mốc${left}</span>`;
+  return `<span class="pace p-${p.pace}">${PACE_LABEL[p.pace]}</span> <span class="muted">${p.done}/${p.total} milestone${left}</span>`;
 }
 
 export function heat(ctx: Ctx, weeks: number): string {
@@ -88,7 +88,7 @@ export function heat(ctx: Ctx, weeks: number): string {
       )
       .join('')}
   </div>
-  <div class="legend"><span><i class="cell s-done l1"></i>bước nhỏ</span><span><i class="cell s-done l3"></i>buổi học dài</span><span><i class="cell s-rest"></i>nghỉ</span><span><i class="cell s-busy"></i>bận</span><span><i class="cell s-paused"></i>tạm dừng</span><span><i class="cell s-miss"></i>chưa học</span></div></div>`;
+  <div class="legend"><span><i class="cell s-done l1"></i>học một chút</span><span><i class="cell s-done l3"></i>buổi học dài</span><span><i class="cell s-rest"></i>nghỉ</span><span><i class="cell s-busy"></i>bận</span><span><i class="cell s-paused"></i>tạm dừng</span><span><i class="cell s-miss"></i>chưa học</span></div></div>`;
 }
 
 export function colorDot(t: Track): string {

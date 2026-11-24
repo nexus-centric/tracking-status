@@ -6,7 +6,7 @@ export const APP_SHORT_NAME = 'Study Hub';
 export const APP_SUBTITLE = 'tracking-status';
 export const BACKUP_PREFIX = 'study-hub-backup';
 export const APP_DESCRIPTION =
-  'Theo dõi việc học mỗi ngày: lộ trình đầy đủ, đợt học 2 đến 4 tuần có sản phẩm cụ thể, bước nhỏ, đồng hồ buổi học và nhìn lại tuần. Dữ liệu nằm hoàn toàn trong trình duyệt.';
+  'Theo dõi topic học mỗi ngày: lộ trình đầy đủ, sprint 2 đến 4 tuần có sản phẩm cụ thể, học một chút mỗi ngày, đồng hồ buổi học và nhìn lại tuần. Dữ liệu nằm hoàn toàn trong trình duyệt.';
 
 export function manifest(): Record<string, unknown> {
   return {

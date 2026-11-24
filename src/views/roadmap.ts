@@ -55,7 +55,7 @@ function projectionLines(t: Track, pj: Projection, prog: RoadmapProgress): strin
     lines.push('<li><span class="lbl">Theo tốc độ gần đây</span><span class="muted">chưa đủ dữ liệu; hoàn thành vài mục là có ước tính</span></li>');
   }
   if (pj.targetFinish) lines.push(`<li><span class="lbl">Nếu học đủ ${t.weeklyTarget} ngày mỗi tuần</span><b>${fmtDate(pj.targetFinish)}</b></li>`);
-  if (pj.plannedFinish) lines.push(`<li><span class="lbl">Theo kế hoạch các đợt</span><b>${fmtDate(pj.plannedFinish)}</b></li>`);
+  if (pj.plannedFinish) lines.push(`<li><span class="lbl">Theo kế hoạch các sprint</span><b>${fmtDate(pj.plannedFinish)}</b></li>`);
   return `<ul class="proj">${lines.join('')}</ul>`;
 }
 
@@ -80,9 +80,9 @@ export function replanReason(t: Track, items: RoadmapItem[], pj: Projection): st
   const unplanned = remaining.filter((i) => !planned.has(i.id)).length;
   const s = activeSprint(state.sprints, t.id);
   const linked = s?.milestones.some((m) => m.itemId);
-  if (s && linked && sprintProgress(s, today()).pace === 'overdue') return `Đợt "${s.title}" đã quá hạn mà còn mục chưa xong.`;
+  if (s && linked && sprintProgress(s, today()).pace === 'overdue') return `Sprint "${s.title}" đã quá hạn mà còn mục chưa xong.`;
   if (pj.behindDays !== undefined && pj.behindDays > 7 && pj.confidence !== 'none' && pj.plannedFinish) return `Theo tốc độ gần đây, bạn sẽ xong muộn hơn kế hoạch khoảng ${pj.behindDays} ngày.`;
-  if (unplanned && planned.size) return `${unplanned} mục chưa nằm trong đợt học nào.`;
+  if (unplanned && planned.size) return `${unplanned} mục chưa nằm trong sprint nào.`;
   return null;
 }
 
@@ -91,7 +91,7 @@ export function roadmapCard(t: Track): string {
   if (!items.length) {
     return `<section class="card roadmap-card empty-rm">
       <div class="row between wrap"><h2>Lộ trình</h2></div>
-      <p class="muted">Có sẵn giáo trình hay danh sách bài học? Dán vào là app tự tách thành từng mục, chia thành các đợt học 2 đến 4 tuần và tính tiến độ cho cả lộ trình.</p>
+      <p class="muted">Có sẵn giáo trình hay danh sách bài học? Dán vào là app tự tách thành từng mục, chia thành các sprint 2 đến 4 tuần và tính tiến độ cho cả lộ trình.</p>
       <a class="btn primary" href="#/t/${t.id}/roadmap/import">Dán lộ trình</a>
     </section>`;
   }
@@ -103,8 +103,8 @@ export function roadmapCard(t: Track): string {
     <div class="row between wrap"><h2>Lộ trình</h2><span class="small muted mono">${prog.done}/${prog.total} mục · ${nf.format(Math.round(prog.pct * 100))}%</span></div>
     ${roadmapLine(prog, t.color)}
     ${projectionLines(t, pj, prog)}
-    ${why ? `<div class="banner replan"><span>${esc(why)} Bạn có muốn xếp lại các đợt học? Ngày tháng chỉ thay đổi khi bạn xác nhận.</span><a class="btn small" href="#/t/${t.id}/plan">Lập lại kế hoạch</a></div>` : ''}
-    <div class="row gap wrap"><a class="btn small" href="#/t/${t.id}/roadmap">Xem toàn bộ lộ trình</a>${why ? '' : `<a class="btn small ghost" href="#/t/${t.id}/plan">Kế hoạch đợt học</a>`}</div>
+    ${why ? `<div class="banner replan"><span>${esc(why)} Bạn có muốn xếp lại các sprint? Ngày tháng chỉ thay đổi khi bạn xác nhận.</span><a class="btn small" href="#/t/${t.id}/plan">Lập lại kế hoạch</a></div>` : ''}
+    <div class="row gap wrap"><a class="btn small" href="#/t/${t.id}/roadmap">Xem toàn bộ lộ trình</a>${why ? '' : `<a class="btn small ghost" href="#/t/${t.id}/plan">Kế hoạch sprint</a>`}</div>
   </section>`;
 }
 
@@ -116,11 +116,11 @@ export function plannedCard(t: Track): string {
   const hasActive = !!activeSprint(state.sprints, t.id);
   const next = planned[0];
   const startBtns = hasActive ? '' : next.start === d
-    ? `<button class="btn small primary" data-act="start-planned" data-id="${next.id}" data-shift="0">Bắt đầu đợt này</button>`
+    ? `<button class="btn small primary" data-act="start-planned" data-id="${next.id}" data-shift="0">Bắt đầu sprint này</button>`
     : `<button class="btn small primary" data-act="start-planned" data-id="${next.id}" data-shift="1">Bắt đầu từ hôm nay</button><button class="btn small ghost" data-act="start-planned" data-id="${next.id}" data-shift="0">Giữ ngày ${fmtDate(next.start)}</button>`;
   return `<section class="card planned-card">
-    <div class="row between wrap"><h2>Các đợt tiếp theo</h2><a class="small" href="#/t/${t.id}/plan">Sửa kế hoạch</a></div>
-    ${hasActive ? '' : `<p class="small muted">Chưa có đợt nào đang chạy. ${next.start === d ? 'Đợt kế tiếp bắt đầu hôm nay.' : `Đợt kế tiếp dự kiến bắt đầu ${fmtDate(next.start)}. "Bắt đầu từ hôm nay" sẽ dời đợt này và các đợt sau theo cùng số ngày.`}</p><div class="row gap wrap">${startBtns}</div>`}
+    <div class="row between wrap"><h2>Các sprint tiếp theo</h2><a class="small" href="#/t/${t.id}/plan">Sửa kế hoạch</a></div>
+    ${hasActive ? '' : `<p class="small muted">Chưa có sprint nào đang chạy. ${next.start === d ? 'Sprint kế tiếp bắt đầu hôm nay.' : `Sprint kế tiếp dự kiến bắt đầu ${fmtDate(next.start)}. "Bắt đầu từ hôm nay" sẽ dời sprint này và các sprint sau theo cùng số ngày.`}</p><div class="row gap wrap">${startBtns}</div>`}
     <ol class="plan-list">${planned.map((s) => `<li><b>${esc(s.title)}</b><span class="small muted mono">${fmtDate(s.start)} - ${fmtDate(s.end)} · ${s.milestones.length} mục</span></li>`).join('')}</ol>
   </section>`;
 }
@@ -129,7 +129,7 @@ export function plannedCard(t: Track): string {
 
 export function roadmapView(id: string): View {
   const t = getTrack(id);
-  if (!t) return { title: 'Không tìm thấy', html: '<section class="card"><p>Không tìm thấy việc học này.</p><a href="#/">Về trang Hôm nay</a></section>' };
+  if (!t) return { title: 'Không tìm thấy', html: '<section class="card"><p>Không tìm thấy topic này.</p><a href="#/">Về trang Hôm nay</a></section>' };
   const items = itemsOf(t.id);
   if (!items.length) return importView(id);
   const d = today();
@@ -147,7 +147,7 @@ export function roadmapView(id: string): View {
   }
   const itemRow = (i: RoadmapItem, k: number) => {
     const s = i.done ? undefined : where.get(i.id);
-    const badge = s ? `<span class="badge${s.status === 'active' ? ' on' : ''}">${s.status === 'active' ? 'đợt hiện tại' : `đợt từ ${fmtDate(s.start)}`}</span>` : '';
+    const badge = s ? `<span class="badge${s.status === 'active' ? ' on' : ''}">${s.status === 'active' ? 'sprint hiện tại' : `sprint từ ${fmtDate(s.start)}`}</span>` : '';
     return `<li class="ri${i.done ? ' done' : ''}" data-id="${i.id}">
       <label class="ri-check"><input type="checkbox" data-act="ri-done" data-id="${i.id}" ${i.done ? 'checked' : ''}><span class="ri-title">${esc(i.title)}</span></label>
       <span class="ri-meta">${i.estimate ? `<span class="est">${esc(estText(i.estimate))}</span>` : ''}${badge}${i.done && i.doneOn ? `<span class="small muted">xong ${fmtDate(i.doneOn)}</span>` : ''}${i.link ? `<a href="${esc(i.link)}" target="_blank" rel="noopener noreferrer" class="small">Mở link</a>` : ''}</span>
@@ -169,7 +169,7 @@ export function roadmapView(id: string): View {
     ${projectionLines(t, pj, prog)}
     ${assumptions(t, pj, prog)}
     ${why ? `<div class="banner replan"><span>${esc(why)} Ngày tháng chỉ thay đổi khi bạn xác nhận.</span><a class="btn small" href="#/t/${t.id}/plan">Lập lại kế hoạch</a></div>` : ''}
-    <div class="row gap wrap"><a class="btn small primary" href="#/t/${t.id}/plan">${state.sprints.some((s) => s.trackId === t.id && s.milestones.some((m) => m.itemId)) ? 'Kế hoạch đợt học' : 'Chia thành các đợt học'}</a><a class="btn small" href="#/t/${t.id}/roadmap/import">Dán thêm mục</a></div>
+    <div class="row gap wrap"><a class="btn small primary" href="#/t/${t.id}/plan">${state.sprints.some((s) => s.trackId === t.id && s.milestones.some((m) => m.itemId)) ? 'Kế hoạch sprint' : 'Chia thành các sprint'}</a><a class="btn small" href="#/t/${t.id}/roadmap/import">Dán thêm mục</a></div>
   </section>
   ${phases.map((ph) => {
     const done = ph.items.filter((i) => i.done).length;
@@ -314,14 +314,14 @@ function previewHtml(parsed: ParseOutcome | null, error: string | null): string 
 
 function planSummary(t: Track, x: ReturnType<typeof importChanges> | null, plan: boolean): string {
   if (!x || !x.newItems.length) return '';
-  if (!plan) return '<p class="small muted">Chỉ tạo lộ trình. Bạn có thể chia thành các đợt học sau.</p>';
+  if (!plan) return '<p class="small muted">Chỉ tạo lộ trình. Bạn có thể chia thành các sprint sau.</p>';
   if (!x.layout || !x.layout.sprints.length) return '<p class="small muted">Không còn mục nào cần lên kế hoạch.</p>';
   const L = x.layout;
   const first = L.sprints[0];
   const active = activeSprint(x.sprints, t.id);
-  const keepNote = active ? `<p class="small muted">Đợt "${esc(active.title)}" đang chạy được giữ nguyên; các đợt mới bắt đầu từ ${fmtDate(x.start)}.</p>` : '';
+  const keepNote = active ? `<p class="small muted">Sprint "${esc(active.title)}" đang chạy được giữ nguyên; các sprint mới bắt đầu từ ${fmtDate(x.start)}.</p>` : '';
   return `<div class="pv-plan">
-    <p><b>${L.sprints.length} đợt học</b>, đợt đầu ${fmtDate(first.start)} - ${fmtDate(first.end)} với ${first.items.length} mục${active ? '' : ' (bắt đầu ngay)'}.</p>
+    <p><b>${L.sprints.length} sprint</b>, sprint đầu ${fmtDate(first.start)} - ${fmtDate(first.end)} với ${first.items.length} mục${active ? '' : ' (bắt đầu ngay)'}.</p>
     <p class="small muted">Dự kiến xong ${L.finish ? fmtDate(L.finish) : ''} nếu học ${L.capacityPerWeek} ngày mỗi tuần, mỗi ngày một buổi. Tổng khối lượng ${sessionsText(L.totalSessions)}.</p>
     ${keepNote}${L.warnings.map((w) => `<p class="small warn-text">${esc(w)}</p>`).join('')}
   </div>`;
@@ -329,7 +329,7 @@ function planSummary(t: Track, x: ReturnType<typeof importChanges> | null, plan:
 
 export function importView(id: string): View {
   const t = getTrack(id);
-  if (!t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy việc học này.</p>' };
+  if (!t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy topic này.</p>' };
   const existing = itemsOf(t.id);
   const p = costPrefs(t);
   const hasLinkedPlan = state.sprints.some((s) => s.trackId === t.id && (s.status === 'planned' || s.status === 'active') && s.milestones.some((m) => m.itemId));
@@ -356,16 +356,16 @@ export function importView(id: string): View {
       <div class="card imp-opts">
         ${existing.length ? `<fieldset class="choice"><legend>Lộ trình hiện có ${existing.length} mục</legend>
           <label class="toggle"><input type="radio" name="mode" value="append" checked><span><b>Thêm vào cuối.</b> Giữ nguyên các mục hiện có.</span></label>
-          <label class="toggle"><input type="radio" name="mode" value="replace"><span><b>Thay toàn bộ lộ trình.</b> Các mục cũ, kể cả mục đã xong, bị xoá; các mốc đã liên kết vẫn được giữ.</span></label>
+          <label class="toggle"><input type="radio" name="mode" value="replace"><span><b>Thay toàn bộ lộ trình.</b> Các mục cũ, kể cả mục đã xong, bị xoá; các milestone đã liên kết vẫn được giữ.</span></label>
         </fieldset>` : ''}
-        <label class="toggle"><input type="checkbox" name="plan" checked><span><b>Chia luôn thành các đợt học.</b> ${hasLinkedPlan ? 'Các đợt đã lên kế hoạch trước đó sẽ được xếp lại; đợt đang chạy giữ nguyên.' : 'Đợt đầu bắt đầu ngay, các đợt sau nối tiếp.'}</span></label>
-        <div class="row gap wrap plan-opts"><span class="small muted">Mỗi đợt</span><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="weeks" value="${w}" ${w === 3 ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div></div>
+        <label class="toggle"><input type="checkbox" name="plan" checked><span><b>Chia luôn thành các sprint.</b> ${hasLinkedPlan ? 'Các sprint đã lên kế hoạch trước đó sẽ được xếp lại; sprint đang chạy giữ nguyên.' : 'Sprint đầu bắt đầu ngay, các sprint sau nối tiếp.'}</span></label>
+        <div class="row gap wrap plan-opts"><span class="small muted">Mỗi sprint</span><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="weeks" value="${w}" ${w === 3 ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div></div>
         <details class="assume"><summary>Ước lượng thời gian (mặc định ${p.sessionMinutes} phút mỗi buổi, ${nf.format(p.itemsPerSession)} mục mỗi buổi)</summary>
           <div class="grid2">
             <label class="field"><span>Một buổi học dài (phút)</span><input type="number" name="sessionMinutes" min="5" max="480" value="${p.sessionMinutes}" class="num"></label>
             <label class="field"><span>Mục không có ước lượng: số mục mỗi buổi</span><input type="number" name="itemsPerSession" min="0.1" max="20" step="0.5" value="${p.itemsPerSession}" class="num"></label>
           </div>
-          <p class="small muted">Mục tiêu hiện tại: ${t.weeklyTarget} ngày học mỗi tuần. Đổi ở trang chỉnh sửa việc học.</p>
+          <p class="small muted">Mục tiêu hiện tại: ${t.weeklyTarget} ngày học mỗi tuần. Đổi ở trang chỉnh sửa topic.</p>
         </details>
         <div class="plan-sum"></div>
         <label class="toggle confirm-replace" hidden><input type="checkbox" name="sure"><span>Tôi hiểu các mục cũ sẽ bị xoá. Nên tải một bản sao lưu trước.</span></label>
@@ -406,7 +406,7 @@ export function importView(id: string): View {
         const n = parsed?.items.length ?? 0;
         btn.disabled = !n;
         const sprints = x?.layout?.sprints.length ?? 0;
-        btn.textContent = !n ? 'Tạo lộ trình' : `${existing.length && !o.replace ? `Thêm ${n} mục` : `Tạo lộ trình ${n} mục`}${o.plan && sprints ? ` và ${sprints} đợt học` : ''}`;
+        btn.textContent = !n ? 'Tạo lộ trình' : `${existing.length && !o.replace ? `Thêm ${n} mục` : `Tạo lộ trình ${n} mục`}${o.plan && sprints ? ` và ${sprints} sprint` : ''}`;
         err.textContent = '';
       };
       const later = () => { clearTimeout(timer); timer = window.setTimeout(refresh, 120); };
@@ -435,7 +435,7 @@ export function importView(id: string): View {
         const sprints = [...changedSprints.filter((s) => !x.changes?.remove.includes(s.id)), ...(x.changes?.create ?? [])];
         await commit(x.newItems, sprints, { deleteItems: x.removeIds, deleteSprints: x.changes?.remove ?? [] });
         const ns = x.changes?.create.length ?? 0;
-        toast(ns ? `Đã tạo lộ trình ${x.newItems.length} mục và ${ns} đợt học.` : `Đã thêm ${x.newItems.length} mục vào lộ trình.`);
+        toast(ns ? `Đã tạo lộ trình ${x.newItems.length} mục và ${ns} sprint.` : `Đã thêm ${x.newItems.length} mục vào lộ trình.`);
         location.hash = `#/t/${t.id}/roadmap`;
       });
       refresh();
@@ -448,7 +448,7 @@ export function importView(id: string): View {
 
 export function planView(id: string): View {
   const t = getTrack(id);
-  if (!t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy việc học này.</p>' };
+  if (!t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy topic này.</p>' };
   const items = itemsOf(t.id);
   if (!items.length) return importView(id);
   const d = today();
@@ -457,21 +457,21 @@ export function planView(id: string): View {
   const p0 = costPrefs(t);
   const html = `<section class="editor rm-plan">
     <a href="#/t/${t.id}/roadmap" class="back">Lộ trình</a>
-    <h1>Kế hoạch đợt học</h1>
-    <p class="muted">App chia các mục chưa xong thành những đợt 2 đến 4 tuần theo mục tiêu ${t.weeklyTarget} ngày học mỗi tuần. Bạn chỉnh tuỳ ý rồi mới tạo; không có ngày nào bị dời nếu bạn không xác nhận.</p>
+    <h1>Kế hoạch sprint</h1>
+    <p class="muted">App chia các mục chưa xong thành những sprint 2 đến 4 tuần theo mục tiêu ${t.weeklyTarget} ngày học mỗi tuần. Bạn chỉnh tuỳ ý rồi mới tạo; không có ngày nào bị dời nếu bạn không xác nhận.</p>
     <form class="plan-form card" novalidate>
       <div class="grid2">
         <label class="field"><span>Bắt đầu từ</span><input type="date" name="start"></label>
-        <div class="field"><span>Mỗi đợt</span><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="weeks" value="${w}" ${w === 3 ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div></div>
+        <div class="field"><span>Mỗi sprint</span><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="weeks" value="${w}" ${w === 3 ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div></div>
         <label class="field"><span>Một buổi học dài (phút)</span><input type="number" name="sessionMinutes" min="5" max="480" value="${p0.sessionMinutes}" class="num"></label>
         <label class="field"><span>Mục không có ước lượng: số mục mỗi buổi</span><input type="number" name="itemsPerSession" min="0.1" max="20" step="0.5" value="${p0.itemsPerSession}" class="num"></label>
       </div>
-      ${active ? `<label class="toggle"><input type="checkbox" name="closeActive" ${activeLate ? 'checked' : ''}><span><b>Khép đợt "${esc(active.title)}" và xếp lại các mục chưa xong của nó.</b> Bỏ chọn để giữ nguyên đợt đang chạy; kế hoạch mới bắt đầu sau ngày ${fmtDate(active.end)}.</span></label>` : ''}
+      ${active ? `<label class="toggle"><input type="checkbox" name="closeActive" ${activeLate ? 'checked' : ''}><span><b>Khép sprint "${esc(active.title)}" và xếp lại các mục chưa xong của nó.</b> Bỏ chọn để giữ nguyên sprint đang chạy; kế hoạch mới bắt đầu sau ngày ${fmtDate(active.end)}.</span></label>` : ''}
     </form>
     <div class="plan-out"></div>
   </section>`;
   return {
-    title: 'Kế hoạch đợt học',
+    title: 'Kế hoạch sprint',
     html,
     mount(root) {
       const form = root.querySelector<HTMLFormElement>('.plan-form')!;
@@ -499,20 +499,20 @@ export function planView(id: string): View {
         const all = itemsOf(t.id);
         const L = layoutPlan(drafts, all, r.track, r.start);
         const replaced = state.sprints.filter((s) => s.trackId === t.id && s.status === 'planned').length;
-        if (!L.sprints.length) { out.innerHTML = '<section class="card"><p>Mọi mục còn lại đã nằm trong đợt đang chạy hoặc đã xong. Không cần lập thêm đợt nào.</p></section>'; return; }
+        if (!L.sprints.length) { out.innerHTML = '<section class="card"><p>Mọi mục còn lại đã nằm trong sprint đang chạy hoặc đã xong. Không cần lập thêm sprint nào.</p></section>'; return; }
         out.innerHTML = `<ol class="plan-sprints">${L.sprints.map((s, i) => `<li class="card ps${s.over ? ' over' : ''}${i === 0 && !(active && !r.closeActive) ? ' first' : ''}">
-          <div class="row between wrap"><input class="ps-title" data-i="${i}" value="${esc(s.title)}" maxlength="200" aria-label="Tên đợt ${i + 1}"><span class="small muted mono">${fmtDate(s.start)} - ${fmtDate(s.end)}</span></div>
+          <div class="row between wrap"><input class="ps-title" data-i="${i}" value="${esc(s.title)}" maxlength="200" aria-label="Tên sprint ${i + 1}"><span class="small muted mono">${fmtDate(s.start)} - ${fmtDate(s.end)}</span></div>
           <div class="row gap wrap"><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="w${i}" data-weeks="${i}" value="${w}" ${w === s.weeks ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div>
           <span class="small ${s.over ? 'warn-text' : 'muted'}">${sessionsText(s.sessions)} / ${s.capacity} buổi</span></div>
           <div class="load"><i style="width:${Math.min(100, (s.sessions / s.capacity) * 100).toFixed(1)}%"></i></div>
           <details><summary>${s.items.length} mục: ${esc(s.items[0].title)}${s.items.length > 1 ? ` … ${esc(s.items[s.items.length - 1].title)}` : ''}</summary><ol class="small">${s.items.map((it) => `<li>${esc(it.title)}${it.estimate ? ` <span class="est">${esc(estText(it.estimate))}</span>` : ''}</li>`).join('')}</ol></details>
-          ${i < L.sprints.length - 1 || s.items.length > 1 ? `<div class="row gap wrap ps-move">${s.items.length > 1 ? `<button type="button" class="link-btn" data-push="${i}">Chuyển mục cuối sang đợt sau</button>` : ''}${i < L.sprints.length - 1 ? `<button type="button" class="link-btn" data-pull="${i}">Kéo mục đầu của đợt sau về</button>` : ''}</div>` : ''}
+          ${i < L.sprints.length - 1 || s.items.length > 1 ? `<div class="row gap wrap ps-move">${s.items.length > 1 ? `<button type="button" class="link-btn" data-push="${i}">Chuyển mục cuối sang sprint sau</button>` : ''}${i < L.sprints.length - 1 ? `<button type="button" class="link-btn" data-pull="${i}">Kéo mục đầu của sprint sau về</button>` : ''}</div>` : ''}
         </li>`).join('')}</ol>
         <section class="card plan-foot">
-          <p><b>${L.sprints.length} đợt</b>, dự kiến xong <b>${L.finish ? fmtDate(L.finish) : ''}</b> nếu học ${L.capacityPerWeek} ngày mỗi tuần (${sessionsText(L.totalSessions)}).</p>
+          <p><b>${L.sprints.length} sprint</b>, dự kiến xong <b>${L.finish ? fmtDate(L.finish) : ''}</b> nếu học ${L.capacityPerWeek} ngày mỗi tuần (${sessionsText(L.totalSessions)}).</p>
           ${L.warnings.map((w) => `<p class="small warn-text">${esc(w)}</p>`).join('')}
-          ${replaced ? `<p class="small muted">${replaced} đợt đã lên kế hoạch trước đó sẽ được thay bằng kế hoạch này.</p>` : ''}
-          <div class="row gap between wrap"><button type="button" class="btn ghost" data-reset>Chia lại tự động</button><button type="button" class="btn primary" data-create>Tạo ${L.sprints.length} đợt học</button></div>
+          ${replaced ? `<p class="small muted">${replaced} sprint đã lên kế hoạch trước đó sẽ được thay bằng kế hoạch này.</p>` : ''}
+          <div class="row gap between wrap"><button type="button" class="btn ghost" data-reset>Chia lại tự động</button><button type="button" class="btn primary" data-create>Tạo ${L.sprints.length} sprint</button></div>
         </section>`;
       };
       form.addEventListener('change', (e) => {
@@ -541,7 +541,7 @@ export function planView(id: string): View {
           const ch = planChanges(L, r.track, state.sprints, d, newId, r.closeActive);
           if (r.track.sessionMinutes !== t.sessionMinutes || r.track.itemsPerSession !== t.itemsPerSession) await saveTrack(r.track);
           await commit([], [...(ch.close ? [ch.close] : []), ...ch.create], { deleteSprints: ch.remove });
-          toast(`Đã tạo ${ch.create.length} đợt học.`);
+          toast(`Đã tạo ${ch.create.length} sprint.`);
           location.hash = `#/t/${t.id}`;
         }
       });
@@ -559,6 +559,6 @@ export async function startPlanned(id: string, shift: boolean): Promise<void> {
   const move = (x: Sprint): Sprint => (delta ? { ...x, start: addDays(x.start, delta), end: addDays(x.end, delta) } : x);
   const later = state.sprints.filter((x) => x.trackId === s.trackId && x.status === 'planned' && x.id !== s.id && x.start >= s.start).map(move);
   await commit([], [{ ...move(s), status: 'active' }, ...later]);
-  toast(delta ? `Đã bắt đầu đợt "${s.title}" từ hôm nay; các đợt sau dời ${Math.abs(delta)} ngày.` : `Đã bắt đầu đợt "${s.title}".`);
+  toast(delta ? `Đã bắt đầu sprint "${s.title}" từ hôm nay; các sprint sau dời ${Math.abs(delta)} ngày.` : `Đã bắt đầu sprint "${s.title}".`);
 }
 

@@ -26,7 +26,7 @@ The app is shown as "The Study Hub" (short name "Study Hub" for the installed PW
   and backups stay compatible; the repository and the Pages path stay `tracking-status`. The service worker cache
   is `tracking-status-v3`.
 - The UI copy stays Vietnamese. Copy rules: full sentences addressed to "bạn", no slogans or gamified hype, the
-  same term for the same thing everywhere ("buổi học", "bước nhỏ", "đợt học", "lộ trình", "mục", "độ đều đặn",
+  same term for the same thing everywhere ("buổi học", "học một chút", "topic", "sprint", "milestone", "lộ trình", "mục", "độ đều đặn",
   "thành quả").
 
 ## 3. Research summary
@@ -70,7 +70,7 @@ inferences, not findings from the sources.
     medium-to-large effect on goal attainment, d = 0.65 (95% CI 0.60 to 0.70).
   - Limits: effect sizes vary by domain; publication bias was tested in the paper but cannot be ruled out fully.
   - Use: each track has a "when and where" plan field with the prompt "Sau khi [việc quen thuộc], tôi sẽ
-    [bước nhỏ] tại [nơi]", shown on the Today card.
+    [học một chút] tại [nơi]", shown on the Today card.
 
 ### 3.3 Streaks, breaks and repair
 
@@ -248,7 +248,7 @@ can grow to at most 4 weeks; otherwise the last sprint is shortened, never below
 and move items across a boundary before creating. Creating replaces earlier `planned` sprints of the track; the
 active sprint is kept unless the user ticks "close and re-plan" (pre-ticked only when it is behind or overdue).
 With no active sprint, the first new sprint is active and the rest are planned. A planned sprint starts only when
-the user presses "Bắt đầu đợt này" or "Bắt đầu từ hôm nay" (the latter shifts it and later planned sprints by the
+the user presses "Bắt đầu sprint này" or "Bắt đầu từ hôm nay" (the latter shifts it and later planned sprints by the
 same number of days).
 
 Progress. `% done` = done effort / total effort when at least one item has an estimate, otherwise done items /
@@ -367,7 +367,7 @@ Layout (audited automatically at 360, 390, 768, 1024, 1280 and 1440 px for horiz
 - 1100 px and up: left side nav; timer page splits into a sticky clock and a settings column (from 960 px).
 - 1400 px and up: wider content (up to 1380 px) and track cards that fill the row.
 
-Logging speed is unchanged: one-tap "Đã làm bước nhỏ" on each Today card, "Ghi nhanh" (G) everywhere, and
+Logging speed is unchanged: one-tap "Đã học một chút" on each Today card, "Ghi nhanh" (G) everywhere, and
 "Bấm giờ học" on each card to start the timer for that track with the last-used mode.
 
 ## 11. Study session timer

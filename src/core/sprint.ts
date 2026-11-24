@@ -28,8 +28,8 @@ export function sprintLength(s: Pick<Sprint, 'start' | 'end'>): number {
 export function lengthWarning(start: Day, end: Day): string | null {
   const n = diffDays(end, start) + 1;
   if (n < 1) return 'Ngày kết thúc phải sau ngày bắt đầu.';
-  if (n < SPRINT_MIN_DAYS) return `Đợt này chỉ ${n} ngày. Đợt 2-4 tuần thường đủ thời gian để ra một sản phẩm nhỏ.`;
-  if (n > SPRINT_MAX_DAYS) return `Đợt này dài ${n} ngày. Đợt dài hơn 4 tuần dễ mất hạn chót; thử tách thành hai đợt.`;
+  if (n < SPRINT_MIN_DAYS) return `Sprint này chỉ ${n} ngày. Sprint 2-4 tuần thường đủ thời gian để ra một sản phẩm nhỏ.`;
+  if (n > SPRINT_MAX_DAYS) return `Sprint này dài ${n} ngày. Sprint dài hơn 4 tuần dễ mất hạn chót; thử tách thành hai sprint.`;
   return null;
 }
 
@@ -69,7 +69,7 @@ export const PACE_LABEL: Record<Pace, string> = {
   overdue: 'đã quá hạn',
   done: 'đã xong',
   dropped: 'đã dừng',
-  'no-milestones': 'chưa có mốc',
+  'no-milestones': 'chưa có milestone',
 };
 
 /** The active sprint of a track: the latest-started sprint with status 'active'. */

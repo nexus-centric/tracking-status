@@ -1,6 +1,6 @@
 {
   "checks": {
-    "tinyToast-1280": "Đã ghi bước nhỏ của hôm nay.",
+    "tinyToast-1280": "Đã ghi nhận bạn học một chút hôm nay.",
     "trackStats-1280": [
       "67điểm Độ đều đặn",
       "6/7Số ngày học trong 7 ngày qua",
@@ -15,7 +15,7 @@
     "timerCleared-1280": true,
     "importPreviewRows": [
       "Việc học30+3",
-      "Đợt học40+4",
+      "Sprint40+4",
       "Mục lộ trình00+0",
       "Buổi học450+45",
       "Ngày nghỉ, ngày bận10+1",
@@ -23,7 +23,7 @@
     ],
     "importToast": "Đã gộp xong, thêm 0 mục lộ trình và 45 buổi học.",
     "roundTrip": true,
-    "tinyToast-768": "Đã ghi bước nhỏ của hôm nay.",
+    "tinyToast-768": "Đã ghi nhận bạn học một chút hôm nay.",
     "trackStats-768": [
       "67điểm Độ đều đặn",
       "6/7Số ngày học trong 7 ngày qua",
@@ -36,7 +36,7 @@
     "timerSaveMinutes-768": "11",
     "timerSavedLog-768": true,
     "timerCleared-768": true,
-    "tinyToast-390": "Đã ghi bước nhỏ của hôm nay.",
+    "tinyToast-390": "Đã ghi nhận bạn học một chút hôm nay.",
     "trackStats-390": [
       "67điểm Độ đều đặn",
       "6/7Số ngày học trong 7 ngày qua",
@@ -50,9 +50,9 @@
     "timerSavedLog-390": true,
     "timerCleared-390": true,
     "midweekStates": [
-      "Hôm qua bạn chưa học. Chỉ cần một bước nhỏ hôm nay là chuỗi ngày học vẫn liền mạch: Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)",
+      "Hôm qua bạn chưa học. Chỉ cần học một chút hôm nay là chuỗi ngày học vẫn liền mạch: Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)",
       "Hôm nay bạn đã ghi 30 phút: SSTables và LSM-tree",
-      "Khi quay lại, bước nhỏ nhất để bắt đầu là: Mở project, cắt lại 10 giây đầu của video du lịch"
+      "Khi quay lại, việc nhỏ nhất để bắt đầu là: Mở project, cắt lại 10 giây đầu của video du lịch"
     ],
     "scheduledReturn": true,
     "pausedCards": [
@@ -63,8 +63,8 @@
     "newSprint": "Phần II: Distributed Data",
     "milestonesAfterAdd": 3,
     "importPreview": "27 mục trong 4 phần · 27 mục có ước lượng",
-    "importPlanSummary": "3 đợt học, đợt đầu 25/10 - 14/11 với 11 mục (bắt đầu ngay). Dự kiến xong 26/12 nếu học 4 ngày mỗi tuần, mỗi ngày một buổi. Tổng khối lượng 34,3 buổi.",
-    "importButton": "Tạo lộ trình 27 mục và 3 đợt học",
+    "importPlanSummary": "3 sprint, sprint đầu 25/10 - 14/11 với 11 mục (bắt đầu ngay). Dự kiến xong 26/12 nếu học 4 ngày mỗi tuần, mỗi ngày một buổi. Tổng khối lượng 34,3 buổi.",
+    "importButton": "Tạo lộ trình 27 mục và 3 sprint",
     "roadmapItems": 27,
     "roadmapSprints": [
       [
@@ -109,12 +109,12 @@
     "projection": [
       "Theo tốc độ gần đây11/1/2027",
       "Nếu học đủ 4 ngày mỗi tuần29/12",
-      "Theo kế hoạch các đợt26/12"
+      "Theo kế hoạch các sprint26/12"
     ],
-    "replanBanner": "Đợt \"Phần 1: Nền tảng container → Phần 2: Kubernetes cơ bản\" đã quá hạn mà còn mục chưa xong. Ngày tháng chỉ thay đổi khi bạn xác nhận.",
+    "replanBanner": "Sprint \"Phần 1: Nền tảng container → Phần 2: Kubernetes cơ bản\" đã quá hạn mà còn mục chưa xong. Ngày tháng chỉ thay đổi khi bạn xác nhận.",
     "planCloseActiveDefault": true,
     "planSprintsProposed": 2,
-    "planFoot": "2 đợt, dự kiến xong 2/1/2027 nếu học 4 ngày mỗi tuần (24,7 buổi).",
+    "planFoot": "2 sprint, dự kiến xong 2/1/2027 nếu học 4 ngày mỗi tuần (24,7 buổi).",
     "afterReplan": [
       [
         "planned",
@@ -140,9 +140,9 @@
     "exportRoadmap": 27,
     "importPreviewRoadmapRow": "Mục lộ trình270+27",
     "importToastRoadmap": "Đã gộp xong, thêm 27 mục lộ trình và 9 buổi học.",
-    "quickPathSummary": "Đã nhận 12 mục. Khi tạo việc học, app chia luôn thành các đợt 3 tuần; phần \"Đợt học đầu tiên\" bên dưới không cần điền.",
+    "quickPathSummary": "Đã nhận 12 mục. Khi tạo topic, app chia luôn thành các sprint 3 tuần; phần \"Sprint đầu tiên\" bên dưới không cần điền.",
     "quickPathSprintHidden": true,
-    "quickPathToast": "Đã tạo việc học với lộ trình 12 mục và 1 đợt học.",
+    "quickPathToast": "Đã tạo topic với lộ trình 12 mục và 1 sprint.",
     "migration": {
       "version": 2,
       "hasRoadmapStore": true,
@@ -150,7 +150,7 @@
       "sprints": 1,
       "logs": 1,
       "roadmap": 0,
-      "oldSprintVisible": "Đợt cũ"
+      "oldSprintVisible": "Sprint cũ"
     },
     "overflow": [],
     "flowClip": true,

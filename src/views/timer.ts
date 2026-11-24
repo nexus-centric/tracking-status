@@ -84,7 +84,7 @@ function setupCard(preferredId: string | null): string {
   const p = timer.getTimerPrefs();
   const tracks = loggableTracks();
   const sel = tracks.find((t) => t.id === preferredId) ?? tracks.find((t) => t.id === p.trackId) ?? tracks[0];
-  if (!sel) return `<section class="card"><h2>Chưa có việc học nào</h2><p class="muted">Đồng hồ ghi thời gian vào một việc học. Hãy thêm việc học trước.</p><a class="btn primary" href="#/new">Thêm việc học</a></section>`;
+  if (!sel) return `<section class="card"><h2>Chưa có topic nào</h2><p class="muted">Đồng hồ ghi thời gian vào một topic. Hãy thêm một topic trước.</p><a class="btn primary" href="#/new">Thêm topic học mới</a></section>`;
   const mode = p.mode;
   return `<section class="card tm-setup">
     <div class="field"><span>Học việc gì</span>
@@ -232,7 +232,7 @@ export async function handleTimerAction(el: HTMLElement): Promise<boolean> {
     case 'start': {
       const p = timer.getTimerPrefs();
       const id = el.dataset.id ?? p.trackId;
-      if (!getTrack(id)) { toast('Chọn một việc học trước.'); return true; }
+      if (!getTrack(id)) { toast('Chọn một topic trước.'); return true; }
       timer.setTimerPrefs({ trackId: id });
       timer.start({ mode: p.mode, trackId: id, targetMin: p.targetMin });
       return true;
@@ -272,7 +272,7 @@ export function openSaveSheet(): void {
   let kind: LogKind = suggestedKind(minutes);
   const tracks = loggableTracks(s.trackId);
   let trackId = getTrack(s.trackId) ? s.trackId : tracks[0]?.id ?? '';
-  if (!trackId) { toast('Không còn việc học nào để ghi buổi này.'); return; }
+  if (!trackId) { toast('Không còn topic nào để ghi buổi này.'); return; }
   const dlg = openModal(`<form class="quick-form" method="dialog" novalidate>
     <header class="modal-head"><h2>Lưu buổi học</h2><button type="button" class="link-btn" data-close>Để sau</button></header>
     <p class="muted small">${MODE_LABEL[s.mode]} · ${s.day === today() ? 'hôm nay' : fmtDay(s.day)}${s.mode === 'pomodoro' ? ' · chỉ tính thời gian tập trung' : ''}</p>

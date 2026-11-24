@@ -868,3 +868,9 @@ html.is-hidden *, html.is-hidden *::before, html.is-hidden *::after { animation-
   .rl-fill .beam { display: none !important; }
 }
 @keyframes rail-flow { from { background-position: 0 0; } to { background-position: 0 200%; } }
+
+.topic-import { margin-bottom: 1rem; }
+.topic-import-preview { margin-top: .6rem; }
+.topic-import-list { margin: .35rem 0 0; padding-left: 1.2rem; }
+.or-split { display: flex; align-items: center; gap: .75rem; margin: 1.1rem 0 1.25rem; color: var(--muted); font-size: .9rem; }
+.or-split::before, .or-split::after { content: ""; flex: 1; height: 1px; background: var(--line); }

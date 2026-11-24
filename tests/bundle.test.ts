@@ -96,7 +96,7 @@ test('version 1 backups still import, with an empty roadmap', () => {
 test('version 2 round-trip keeps roadmap, planned sprints and milestone links; validates items', () => {
   const data = {
     tracks: [{ id: 't1', name: 'A', color: '#2f6f62', why: '', tinyAction: '', plan: '', weeklyTarget: 5, restDays: [], nextStep: '', pauses: [], archived: false, createdAt: '2026-11-01', sessionMinutes: 60, itemsPerSession: 1.5 }],
-    sprints: [{ id: 's', trackId: 't1', title: 'Đợt 2', deliverable: '', start: '2026-12-01', end: '2026-12-14', status: 'planned' as const, milestones: [{ id: 'm', text: 'Bài 1', done: false, itemId: 'i1' }, { id: 'm2', text: 'Bài x', done: false, itemId: 'missing' }] }],
+    sprints: [{ id: 's', trackId: 't1', title: 'Sprint 2', deliverable: '', start: '2026-12-01', end: '2026-12-14', status: 'planned' as const, milestones: [{ id: 'm', text: 'Bài 1', done: false, itemId: 'i1' }, { id: 'm2', text: 'Bài x', done: false, itemId: 'missing' }] }],
     roadmap: [
       { id: 'i1', trackId: 't1', order: 0, title: 'Bài 1', phase: 'P1', estimate: { unit: 'min' as const, value: 30 }, link: 'https://e.example', done: true, doneOn: '2026-11-10' },
       { id: 'i2', trackId: 'ghost', order: 1, title: 'orphan', done: false },

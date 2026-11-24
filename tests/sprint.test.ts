@@ -51,7 +51,7 @@ test('length warnings outside 2-4 weeks', () => {
   assert.equal(lengthWarning('2026-11-02', defaultEnd('2026-11-02')), null);
   assert.equal(defaultEnd('2026-11-02'), '2026-11-22');
   assert.match(lengthWarning('2026-11-02', '2026-11-08') ?? '', /7 ngày/);
-  assert.match(lengthWarning('2026-11-02', '2026-12-31') ?? '', /hai đợt/);
+  assert.match(lengthWarning('2026-11-02', '2026-12-31') ?? '', /hai sprint/);
   assert.match(lengthWarning('2026-11-02', '2026-11-01') ?? '', /sau ngày bắt đầu/);
 });
 

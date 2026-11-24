@@ -1,0 +1,44 @@
+{
+  "topics": [
+    {
+      "title": "Kubernetes căn bản",
+      "description": "Nắm các khái niệm cốt lõi để tự dựng lab.",
+      "tinyAction": "đọc 10 phút docs Kubernetes",
+      "plan": "Sau khi ăn tối, mở docs tại bàn làm việc",
+      "weeklyTarget": 4,
+      "lessons": [
+        {
+          "title": "Tổng quan kiến trúc",
+          "url": "https://kubernetes.io/docs/concepts/overview/"
+        },
+        {
+          "title": "Pod và container",
+          "url": "https://kubernetes.io/docs/concepts/workloads/pods/",
+          "phase": "Pod và workload",
+          "estimate": { "unit": "min", "value": 45 }
+        },
+        {
+          "title": "Deployment",
+          "url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/",
+          "phase": "Pod và workload",
+          "estimate": { "unit": "min", "value": 60 }
+        }
+      ]
+    },
+    {
+      "title": "GitOps với Argo CD",
+      "description": "Deploy bằng Git thay vì kubectl apply thủ công.",
+      "lessons": [
+        {
+          "title": "Argo CD là gì",
+          "url": "https://argo-cd.readthedocs.io/en/stable/"
+        },
+        {
+          "title": "Cài Argo CD lên cluster lab",
+          "url": "https://argo-cd.readthedocs.io/en/stable/getting_started/",
+          "estimate": { "unit": "session", "value": 1 }
+        }
+      ]
+    }
+  ]
+}

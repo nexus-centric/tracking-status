@@ -132,7 +132,7 @@ async function quickTiny(id: string, origin?: { x: number; y: number }): Promise
   const before = todayState(ctxFor(t));
   queueCelebration({ trackId: id, fromScore: momentum(ctxFor(t)), origin, color: t.color });
   await saveLog(entry);
-  const msg = before === 'recover' ? 'Đã ghi. Chuỗi ngày học của bạn vẫn liền mạch.' : before === 'restart' ? 'Đã ghi. Chuỗi ngày học bắt đầu lại từ hôm nay.' : 'Đã ghi bước nhỏ của hôm nay.';
+  const msg = before === 'recover' ? 'Đã ghi. Chuỗi ngày học của bạn vẫn liền mạch.' : before === 'restart' ? 'Đã ghi. Chuỗi ngày học bắt đầu lại từ hôm nay.' : 'Đã ghi nhận bạn học một chút hôm nay.';
   toast(msg, { label: 'Hoàn tác', run: () => void deleteLog(entry.id) });
 }
 
@@ -176,13 +176,13 @@ app.addEventListener('click', async (e) => {
     }
     case 'load-demo': await loadDemo(); toast('Đã thêm dữ liệu mẫu.'); location.hash = '#/'; return;
     case 'remove-demo': await removeDemo(); toast('Đã xoá dữ liệu mẫu.'); return;
-    case 'archive': if (t) { await saveTrack({ ...t, archived: !t.archived }); toast(t.archived ? 'Việc học đã hiện lại.' : 'Đã lưu trữ việc học. Dữ liệu vẫn còn nguyên và có trong bản sao lưu.'); location.hash = '#/'; } return;
+    case 'archive': if (t) { await saveTrack({ ...t, archived: !t.archived }); toast(t.archived ? 'Topic đã hiện lại.' : 'Đã lưu trữ topic. Dữ liệu vẫn còn nguyên và có trong bản sao lưu.'); location.hash = '#/'; } return;
     case 'del-track':
-      if (t && confirm(`Xoá "${t.name}" cùng toàn bộ buổi học và đợt học? Thao tác này không hoàn tác được.`)) { await deleteTrack(t.id); toast('Đã xoá việc học.'); location.hash = '#/'; }
+      if (t && confirm(`Xoá "${t.name}" cùng toàn bộ buổi học và sprint? Thao tác này không hoàn tác được.`)) { await deleteTrack(t.id); toast('Đã xoá topic.'); location.hash = '#/'; }
       return;
     case 'del-sprint': {
       const s = state.sprints.find((x) => x.id === id);
-      if (s && confirm(`Xoá đợt học "${s.title}"? Các buổi học đã ghi vẫn được giữ nguyên.`)) { await deleteSprint(id); location.hash = `#/t/${s.trackId}`; }
+      if (s && confirm(`Xoá sprint "${s.title}"? Các buổi học đã ghi vẫn được giữ nguyên.`)) { await deleteSprint(id); location.hash = `#/t/${s.trackId}`; }
       return;
     }
     case 'export': {
@@ -285,7 +285,7 @@ function openImportPreview(text: string): void {
     <p class="muted small">File tạo lúc ${p.bundle.exportedAt ? esc(fmtDay(p.bundle.exportedAt.slice(0, 10), true)) : 'không rõ'} · định dạng ${p.bundle.version}${p.dropped ? ` · bỏ qua ${p.dropped} mục không hợp lệ` : ''}</p>
     <table class="wk-table import-table"><thead><tr><th></th><th>Trong file</th><th>Hiện có</th><th>Gộp sẽ thêm</th></tr></thead><tbody>
       ${row('Việc học', p.file.tracks, p.current.tracks, p.merge.tracks)}
-      ${row('Đợt học', p.file.sprints, p.current.sprints, p.merge.sprints)}
+      ${row('Sprint', p.file.sprints, p.current.sprints, p.merge.sprints)}
       ${row('Mục lộ trình', p.file.roadmap, p.current.roadmap, p.merge.roadmap)}
       ${row('Buổi học', p.file.logs, p.current.logs, p.merge.logs)}
       ${row('Ngày nghỉ, ngày bận', p.file.marks, p.current.marks, p.merge.marks)}
@@ -310,7 +310,7 @@ function openImportPreview(text: string): void {
     }
     const r = await applyImport(p.bundle, mode());
     dlg.close();
-    toast(mode() === 'replace' ? `Đã khôi phục ${r.tracks} việc học, ${r.items} mục lộ trình và ${r.logs} buổi học.` : `Đã gộp xong, thêm ${r.addedItems} mục lộ trình và ${r.addedLogs} buổi học.`);
+    toast(mode() === 'replace' ? `Đã khôi phục ${r.tracks} topic, ${r.items} mục lộ trình và ${r.logs} buổi học.` : `Đã gộp xong, thêm ${r.addedItems} mục lộ trình và ${r.addedLogs} buổi học.`);
   });
 }
 onChange(() => {

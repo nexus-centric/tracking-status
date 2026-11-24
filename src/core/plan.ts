@@ -85,7 +85,7 @@ function autoTitle(items: RoadmapItem[], n: number): string {
   const phases = [...new Set(items.map((i) => i.phase).filter((x): x is string => !!x))];
   if (phases.length === 1) return phases[0].slice(0, 200);
   if (phases.length > 1) return `${phases[0]} → ${phases[phases.length - 1]}`.slice(0, 200);
-  return `Đợt ${n}`;
+  return `Sprint ${n}`;
 }
 
 function autoDeliverable(items: RoadmapItem[]): string {
@@ -113,8 +113,8 @@ export function layoutPlan(drafts: DraftSprint[], all: RoadmapItem[], track: Tra
   });
   const warnings: string[] = [];
   const over = sprints.filter((s) => s.over).length;
-  if (over) warnings.push(`${over} đợt có khối lượng vượt số buổi học dự kiến. Bạn có thể kéo dài đợt đó hoặc chuyển bớt mục sang đợt sau.`);
-  if (drafts.length >= MAX_PLANNED_SPRINTS) warnings.push(`Kế hoạch dừng ở ${MAX_PLANNED_SPRINTS} đợt (khoảng nửa năm). Phần còn lại sẽ được xếp khi bạn lập lại kế hoạch.`);
+  if (over) warnings.push(`${over} sprint có khối lượng vượt số buổi học dự kiến. Bạn có thể kéo dài sprint đó hoặc chuyển bớt mục sang sprint sau.`);
+  if (drafts.length >= MAX_PLANNED_SPRINTS) warnings.push(`Kế hoạch dừng ở ${MAX_PLANNED_SPRINTS} sprint (khoảng nửa năm). Phần còn lại sẽ được xếp khi bạn lập lại kế hoạch.`);
   return {
     sprints,
     finish: sprints.length ? sprints[sprints.length - 1].end : null,

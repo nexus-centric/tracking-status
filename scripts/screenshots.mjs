@@ -227,7 +227,7 @@ for (const width of [1280, 768, 390]) {
   // Finish a sprint, then start a new one.
   await go(page, '#/t/demo-reading', '.sprint');
   await page.click('[data-act="finish-sprint"]');
-  await page.fill('dialog [name="reflection"]', 'Chương 3 dài hơn dự kiến, đợt sau chia nhỏ hơn.');
+  await page.fill('dialog [name="reflection"]', 'Chương 3 dài hơn dự kiến, sprint sau chia nhỏ hơn.');
   await page.click('dialog button[type="submit"]');
   await page.waitForSelector('.past');
   await go(page, '#/t/demo-reading?new-sprint=1', '.sprint-form');
@@ -455,7 +455,7 @@ let roadmapBackup = null;
       const db = r.result;
       const tx = db.transaction(['tracks', 'sprints', 'logs'], 'readwrite');
       tx.objectStore('tracks').put({ id: 'old', name: 'Việc học cũ', color: '#2f5bea', why: '', tinyAction: 'Đọc 10 phút', plan: '', weeklyTarget: 4, restDays: [], nextStep: '', pauses: [], archived: false, createdAt: '2026-11-01' });
-      tx.objectStore('sprints').put({ id: 'olds', trackId: 'old', title: 'Đợt cũ', deliverable: '', start: '2026-11-03', end: '2026-11-23', status: 'active', milestones: [{ id: 'm', text: 'Mốc cũ', done: false }] });
+      tx.objectStore('sprints').put({ id: 'olds', trackId: 'old', title: 'Sprint cũ', deliverable: '', start: '2026-11-03', end: '2026-11-23', status: 'active', milestones: [{ id: 'm', text: 'Milestone cũ', done: false }] });
       tx.objectStore('logs').put({ id: 'oldl', trackId: 'old', day: '2026-11-10', kind: 'full', minutes: 30, note: '', blocker: '', evidence: [], createdAt: '2026-11-10T12:00:00Z' });
       tx.oncomplete = () => { db.close(); res(); };
     };

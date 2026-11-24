@@ -42,7 +42,7 @@ test('weekly summary aggregates rhythm, minutes, milestones, evidence and blocke
   assert.match(s.text, /1 giờ 40 phút/);
   assert.match(s.text, /2\/11: commit - https:\/\/example.com\/c\/1/);
   assert.match(s.text, /Vướng:\n  - 4\/11: Port-forward bị ngắt/);
-  assert.match(s.text, /## Video: tạm dừng\n- Bước nhỏ nhất khi quay lại: Cắt 10 giây đầu/);
+  assert.match(s.text, /## Video: tạm dừng\n- Việc nhỏ nhất khi quay lại: Cắt 10 giây đầu/);
   assert.match(s.text, /## Tự nhận xét\n- Làm được: Giữ được nhịp\n- Tuần sau: Cài Argo CD/);
   assert.doesNotMatch(s.text, /Vướng: $/m);
 });
@@ -67,7 +67,7 @@ test('re-entry suggests the written next step, else the next milestone, and a li
   const r = reentry(t, [sprint], logs, '2026-11-04'); // Wednesday
   assert.equal(r.daysAway, 17);
   assert.equal(r.lastNote, 'Dừng ở bước cài Argo CD');
-  assert.equal(r.step, 'Làm 10 phút đầu tiên cho mốc: Cài Argo CD');
+  assert.equal(r.step, 'Làm 10 phút đầu tiên cho milestone: Cài Argo CD');
   assert.equal(r.nextMonday, '2026-11-09');
   assert.equal(r.lighterTarget, 3);
   assert.equal(reentry({ ...t, nextStep: 'Mở file values.yaml' }, [sprint], logs, '2026-11-09').step, 'Mở file values.yaml');

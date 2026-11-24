@@ -7,10 +7,10 @@ import type { Milestone, Sprint, Track } from '../core/types.js';
 import { commit, ctxFor, getTrack, itemsOf, markMilestone, newId, saveSprint, saveTrack, state } from '../state.js';
 import { importChanges, plannedCard, roadmapCard } from './roadmap.js';
 import { parseRoadmapInput, type ParseOutcome } from '../core/roadmap-parse.js';
+import { lessonsToParseOutcome, parseTopicImport, topicImportPreview, trackFromImport } from '../core/topic-import.js';
 import { costPrefs } from '../core/roadmap.js';
 import { esc, toast } from '../ui.js';
 import { colorDot, dots7, heat, restDaysText, scoreRing, sprintBar, sprintMeta, weekBar } from './parts.js';
-import { demoBanner } from './today.js';
 
 export interface View { title: string; html: string; mount?: (root: HTMLElement) => void }
 
@@ -31,7 +31,7 @@ function evidenceHtml(l: { evidence: { kind: string; value: string; label?: stri
 
 export function trackView(id: string, params: URLSearchParams): View {
   const t = getTrack(id);
-  if (!t) return { title: 'Không tìm thấy', html: `<section class="card"><p>Không tìm thấy việc học này. Có thể nó đã bị xoá.</p><a href="#/">Về trang Hôm nay</a></section>` };
+  if (!t) return { title: 'Không tìm thấy', html: `<section class="card"><p>Không tìm thấy topic này. Có thể nó đã bị xoá.</p><a href="#/">Về trang Hôm nay</a></section>` };
   if (params.get('new-sprint')) return sprintEditor(t);
   const d = today();
   const ctx = ctxFor(t);
@@ -42,15 +42,14 @@ export function trackView(id: string, params: URLSearchParams): View {
   const logs = state.logs.filter((l) => l.trackId === t.id).sort((a, b) => (a.day === b.day ? (a.createdAt < b.createdAt ? 1 : -1) : a.day < b.day ? 1 : -1));
   const total = logs.reduce((a, l) => a + l.minutes, 0);
   const l7 = last7(ctx);
-  const html = `${demoBanner()}
-  <section class="track-head" data-track="${t.id}" style="--c:${esc(t.color)}">
+  const html = `<section class="track-head" data-track="${t.id}" style="--c:${esc(t.color)}">
     <div>
       <a href="#/" class="back">Hôm nay</a>
       <h1>${colorDot(t)}${esc(t.name)}</h1>
       ${t.why ? `<p class="muted">${esc(t.why)}</p>` : ''}
     </div>
     <div class="row gap wrap">
-      ${paused ? `<button class="btn primary" data-act="resume" data-id="${t.id}">Học lại từ hôm nay</button>` : `<button class="btn primary" data-tm="quick-start" data-id="${t.id}">Bấm giờ học</button><button class="btn" data-act="log" data-id="${t.id}">Ghi buổi học</button><button class="btn ghost" data-act="pause" data-id="${t.id}">Tạm dừng việc này</button>`}
+      ${paused ? `<button class="btn primary" data-act="resume" data-id="${t.id}">Học lại từ hôm nay</button>` : `<button class="btn primary" data-tm="quick-start" data-id="${t.id}">Bấm giờ học</button><button class="btn" data-act="log" data-id="${t.id}">Ghi buổi học</button><button class="btn ghost" data-act="pause" data-id="${t.id}">Tạm dừng topic này</button>`}
       <a class="btn ghost" href="#/t/${t.id}/edit">Chỉnh sửa</a>
     </div>
   </section>
@@ -71,22 +70,22 @@ export function trackView(id: string, params: URLSearchParams): View {
     </div>
   </section>
   ${roadmapCard(t)}
-  ${s ? sprintCard(s) : hasPlanned ? '' : `<section class="card"><h2>Đợt học</h2><p class="muted">Việc này chưa có đợt học nào đang chạy. Một đợt 2 đến 4 tuần, kết thúc bằng một sản phẩm cụ thể, giúp bạn biết rõ mình đang tiến tới đâu.</p><div class="row gap wrap">${itemsOf(t.id).some((i) => !i.done) ? `<a class="btn primary" href="#/t/${t.id}/plan">Chia lộ trình thành các đợt</a><a class="btn ghost" href="#/t/${t.id}?new-sprint=1">Tự đặt một đợt</a>` : `<a class="btn primary" href="#/t/${t.id}?new-sprint=1">Đặt đợt học mới</a>`}</div></section>`}
+  ${s ? sprintCard(s) : hasPlanned ? '' : `<section class="card"><h2>Sprint</h2><p class="muted">Topic này chưa có sprint nào đang chạy. Một sprint 2 đến 4 tuần, kết thúc bằng một sản phẩm cụ thể, giúp bạn biết rõ mình đang tiến tới đâu.</p><div class="row gap wrap">${itemsOf(t.id).some((i) => !i.done) ? `<a class="btn primary" href="#/t/${t.id}/plan">Chia lộ trình thành các sprint</a><a class="btn ghost" href="#/t/${t.id}?new-sprint=1">Tự đặt một sprint</a>` : `<a class="btn primary" href="#/t/${t.id}?new-sprint=1">Đặt sprint mới</a>`}</div></section>`}
   ${plannedCard(t)}
   <section class="card">
     <h2>Các buổi học đã ghi</h2>
     ${logs.length ? `<ol class="logs">${logs.slice(0, 60).map((l) => `<li class="log">
       <div class="log-day">${fmtDay(l.day, true)}</div>
       <div class="log-body">
-        <p><span class="tag ${l.kind}">${l.kind === 'tiny' ? 'bước nhỏ' : 'buổi học'}</span>${l.minutes ? `<span class="muted small">${fmtMinutes(l.minutes)}</span>` : ''} ${esc(l.note)}</p>
-        ${l.milestoneId ? `<p class="small ok-text">Hoàn thành mốc: ${esc(findMilestone(l.milestoneId)?.text ?? '')}</p>` : ''}
+        <p><span class="tag ${l.kind}">${l.kind === 'tiny' ? 'học một chút' : 'buổi học'}</span>${l.minutes ? `<span class="muted small">${fmtMinutes(l.minutes)}</span>` : ''} ${esc(l.note)}</p>
+        ${l.milestoneId ? `<p class="small ok-text">Hoàn thành milestone: ${esc(findMilestone(l.milestoneId)?.text ?? '')}</p>` : ''}
         ${l.blocker ? `<p class="small warn-text">Chỗ vướng: ${esc(l.blocker)}</p>` : ''}
         ${evidenceHtml(l)}
       </div>
       <div class="log-acts"><button class="link-btn" data-act="edit-log" data-id="${l.id}">Chỉnh sửa</button><button class="link-btn" data-act="del-log" data-id="${l.id}">Xoá</button></div>
-    </li>`).join('')}</ol>${logs.length > 60 ? `<p class="small muted">Đang hiện 60 buổi gần nhất. Bản sao lưu JSON có đầy đủ mọi buổi học.</p>` : ''}` : '<p class="muted">Bạn chưa ghi buổi học nào. Một bước nhỏ đầu tiên là đủ để bắt đầu.</p>'}
+    </li>`).join('')}</ol>${logs.length > 60 ? `<p class="small muted">Đang hiện 60 buổi gần nhất. Bản sao lưu JSON có đầy đủ mọi buổi học.</p>` : ''}` : '<p class="muted">Bạn chưa ghi buổi học nào. Học một chút là đủ để bắt đầu.</p>'}
   </section>
-  ${past.length ? `<section class="card"><h2>Các đợt học trước</h2><ul class="past">${past.map((p) => `<li><b>${esc(p.title)}</b> <span class="small">${sprintMeta(p, d)}</span><br><span class="small muted">${fmtDay(p.start)} - ${fmtDay(p.end)} · ${esc(p.deliverable)}</span>${p.reflection ? `<p class="small">${esc(p.reflection)}</p>` : ''}</li>`).join('')}</ul></section>` : ''}`;
+  ${past.length ? `<section class="card"><h2>Các sprint trước</h2><ul class="past">${past.map((p) => `<li><b>${esc(p.title)}</b> <span class="small">${sprintMeta(p, d)}</span><br><span class="small muted">${fmtDay(p.start)} - ${fmtDay(p.end)} · ${esc(p.deliverable)}</span>${p.reflection ? `<p class="small">${esc(p.reflection)}</p>` : ''}</li>`).join('')}</ul></section>` : ''}`;
   return { title: t.name, html };
 }
 
@@ -100,14 +99,14 @@ function sprintCard(s: Sprint): string {
   const p = sprintProgress(s, d);
   return `<section class="card sprint">
     <div class="row between wrap"><h2>${esc(s.title)}</h2><span class="small">${sprintMeta(s, d)}</span></div>
-    <p class="deliverable"><span class="lbl">Sản phẩm cuối đợt</span>${esc(s.deliverable || 'chưa ghi')}</p>
+    <p class="deliverable"><span class="lbl">Sản phẩm cuối sprint</span>${esc(s.deliverable || 'chưa ghi')}</p>
     ${sprintBar(s, d)}
-    <p class="small muted">${fmtDay(s.start)} - ${fmtDay(s.end)} · đã qua ${p.elapsed}/${p.totalDays} ngày${p.pace === 'behind' ? ' · bạn có thể bớt một mốc hoặc chia mốc nhỏ hơn' : ''}</p>
+    <p class="small muted">${fmtDay(s.start)} - ${fmtDay(s.end)} · đã qua ${p.elapsed}/${p.totalDays} ngày${p.pace === 'behind' ? ' · bạn có thể bớt một milestone hoặc chia nhỏ hơn' : ''}</p>
     <ul class="milestones ms-rail" style="--done:${s.milestones.length ? (s.milestones.filter((m) => m.done).length / s.milestones.length).toFixed(3) : 0}">${s.milestones
-      .map((m) => `<li class="${m.done ? 'done' : ''}"><label><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${m.id}" ${m.done ? 'checked' : ''}><span>${esc(m.text)}</span></label>${m.itemId ? '<span class="badge" title="Mốc này là một mục trong lộ trình; đánh dấu ở đâu cũng được">lộ trình</span>' : ''}${m.doneOn ? `<span class="small muted">${fmtDay(m.doneOn)}</span>` : ''}<button class="link-btn" data-act="ms-del" data-sprint="${s.id}" data-ms="${m.id}" aria-label="Xoá mốc">Xoá</button></li>`)
+      .map((m) => `<li class="${m.done ? 'done' : ''}"><label><input type="checkbox" data-act="ms" data-sprint="${s.id}" data-ms="${m.id}" ${m.done ? 'checked' : ''}><span>${esc(m.text)}</span></label>${m.itemId ? '<span class="badge" title="Milestone này là một mục trong lộ trình; đánh dấu ở đâu cũng được">lộ trình</span>' : ''}${m.doneOn ? `<span class="small muted">${fmtDay(m.doneOn)}</span>` : ''}<button class="link-btn" data-act="ms-del" data-sprint="${s.id}" data-ms="${m.id}" aria-label="Xoá milestone">Xoá</button></li>`)
       .join('')}</ul>
-    <form class="row gap ms-add" data-sprint="${s.id}"><input name="ms" placeholder="Thêm một mốc, ví dụ: viết README" class="grow" maxlength="300"><button class="btn small">Thêm mốc</button></form>
-    <div class="row gap wrap"><a class="btn ghost small" href="#/t/${s.trackId}/sprint/${s.id}">Chỉnh sửa đợt</a><button class="btn small" data-act="finish-sprint" data-id="${s.id}">Kết thúc đợt học</button></div>
+    <form class="row gap ms-add" data-sprint="${s.id}"><input name="ms" placeholder="Thêm một milestone, ví dụ: viết README" class="grow" maxlength="300"><button class="btn small">Thêm milestone</button></form>
+    <div class="row gap wrap"><a class="btn ghost small" href="#/t/${s.trackId}/sprint/${s.id}">Chỉnh sửa sprint</a><button class="btn small" data-act="finish-sprint" data-id="${s.id}">Kết thúc sprint</button></div>
   </section>`;
 }
 
@@ -118,7 +117,7 @@ export const TEMPLATES: Record<string, { name: string; tiny: string; plan: strin
     milestones: ['Chọn clip và dựng timeline thô', 'Cắt khớp theo nhạc', 'Chỉnh màu và âm thanh cơ bản', 'Thêm chữ, xuất bản 1080p'],
   },
   devops: {
-    name: 'DevOps lab', tiny: 'Mở terminal, chạy một lệnh hoặc đọc một trang docs (10 phút)', plan: 'Sau khi tắm xong buổi tối, tôi mở laptop và làm bước nhỏ.', target: 5, rest: [0],
+    name: 'DevOps lab', tiny: 'Mở terminal, chạy một lệnh hoặc đọc một trang docs (10 phút)', plan: 'Sau khi tắm xong buổi tối, tôi mở laptop và học một chút.', target: 5, rest: [0],
     sprint: 'Một bài lab chạy được', deliverable: 'Repo có README và lệnh dựng lại được toàn bộ lab',
     milestones: ['Dựng môi trường (cluster hoặc VM)', 'Làm phần chính của lab', 'Ghi lỗi gặp phải và cách sửa', 'Viết README, push repo'],
   },
@@ -140,14 +139,114 @@ function weekdayPicker(selected: number[]): string {
   return `<div class="wd-pick">${[1, 2, 3, 4, 5, 6, 0].map((n) => `<label><input type="checkbox" name="rest" value="${n}" ${selected.includes(n) ? 'checked' : ''}><span>${weekdayShort(n)}</span></label>`).join('')}</div>`;
 }
 
+
+function topicImportPanel(): string {
+  return `<fieldset class="card topic-import">
+    <legend>Import danh sách topic từ JSON</legend>
+    <p class="muted small">Dán JSON hoặc chọn file .json: một topic hoặc một mảng topic, mỗi topic kèm danh sách bài học. Việc sao lưu/khôi phục toàn bộ dữ liệu nằm ở mục <a href="#/settings">Cài đặt</a>, khác với import này.</p>
+    <div class="row gap wrap"><label class="btn file-btn">Chọn file JSON<input type="file" accept="application/json,.json" data-topic-file hidden></label></div>
+    <label class="field"><span>Hoặc dán JSON</span><textarea data-topic-json rows="8" spellcheck="false" placeholder="${esc('{ "title": "Kubernetes căn bản", "lessons": [{ "title": "Tổng quan", "url": "https://..." }] }')}"></textarea></label>
+    <div class="topic-import-preview" data-topic-preview></div>
+    <p class="err" data-topic-err role="alert"></p>
+    <button type="button" class="btn primary" data-topic-import disabled>Thêm topic</button>
+  </fieldset>
+  <p class="or-split">hoặc nhập tay bên dưới</p>`;
+}
+
+async function applyTopicImport(root: HTMLElement, text: string): Promise<void> {
+  const err = root.querySelector<HTMLElement>('[data-topic-err]')!;
+  const parsed = parseTopicImport(text);
+  if (!parsed.ok) { err.textContent = parsed.error; return; }
+  const d = today();
+  const startLen = state.tracks.length;
+  let addedLessons = 0;
+  let addedSprints = 0;
+  let firstId = '';
+  for (const [i, topic] of parsed.topics.entries()) {
+    const track = trackFromImport(topic, { id: newId(), color: COLORS[(startLen + i) % COLORS.length], createdAt: d });
+    if (!firstId) firstId = track.id;
+    if (topic.lessons.length) {
+      const x = importChanges(track, lessonsToParseOutcome(topic.lessons), {
+        weeks: 3, plan: true, replace: false,
+        sessionMinutes: costPrefs(track).sessionMinutes,
+        itemsPerSession: costPrefs(track).itemsPerSession,
+      });
+      await saveTrack(x.track);
+      await commit(x.newItems, x.changes?.create ?? []);
+      addedLessons += x.newItems.length;
+      addedSprints += x.changes?.create.length ?? 0;
+    } else {
+      await saveTrack(track);
+    }
+  }
+  const n = parsed.topics.length;
+  const lessonBit = addedLessons ? `, ${addedLessons} bài học` : '';
+  const sprintBit = addedSprints ? ` và ${addedSprints} sprint` : '';
+  toast(`Đã thêm ${n} topic${lessonBit}${sprintBit}.`);
+  location.hash = n === 1 ? `#/t/${firstId}` : '#/';
+}
+
+function bindTopicImport(root: HTMLElement): void {
+  const area = root.querySelector<HTMLTextAreaElement>('[data-topic-json]');
+  const preview = root.querySelector<HTMLElement>('[data-topic-preview]');
+  const err = root.querySelector<HTMLElement>('[data-topic-err]');
+  const btn = root.querySelector<HTMLButtonElement>('[data-topic-import]');
+  const file = root.querySelector<HTMLInputElement>('[data-topic-file]');
+  if (!area || !preview || !err || !btn) return;
+
+  const refresh = (): void => {
+    const text = area.value.trim();
+    if (!text) {
+      preview.innerHTML = '';
+      err.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Thêm topic';
+      return;
+    }
+    const parsed = parseTopicImport(text);
+    if (!parsed.ok) {
+      preview.innerHTML = '';
+      err.textContent = parsed.error;
+      btn.disabled = true;
+      btn.textContent = 'Thêm topic';
+      return;
+    }
+    err.textContent = '';
+    const p = topicImportPreview(parsed.topics);
+    const head = p.lessonCount
+      ? `Sẽ thêm ${p.topicCount} topic, tổng ${p.lessonCount} bài học.`
+      : `Sẽ thêm ${p.topicCount} topic.`;
+    const plan = p.lessonCount ? '<p class="small muted">App sẽ tự chia bài học thành các sprint 3 tuần. Bạn có thể sửa sau.</p>' : '';
+    preview.innerHTML = `<p><b>${esc(head)}</b></p><ul class="topic-import-list">${p.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${plan}`;
+    btn.disabled = false;
+    btn.textContent = p.topicCount === 1 ? 'Thêm topic này' : `Thêm ${p.topicCount} topic`;
+  };
+
+  area.addEventListener('input', refresh);
+  file?.addEventListener('change', async () => {
+    const f = file.files?.[0];
+    if (!f) return;
+    try {
+      area.value = await f.text();
+      refresh();
+    } catch {
+      err.textContent = 'Không đọc được file. Hãy chọn một file .json.';
+      btn.disabled = true;
+    }
+    file.value = '';
+  });
+  btn.addEventListener('click', () => void applyTopicImport(root, area.value));
+}
+
 export function trackEditor(id?: string): View {
   const t = id ? getTrack(id) : undefined;
-  if (id && !t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy việc học này.</p>' };
+  if (id && !t) return { title: 'Không tìm thấy', html: '<p>Không tìm thấy topic này.</p>' };
   const d = today();
   const color = t?.color ?? COLORS[state.tracks.length % COLORS.length];
   const html = `<section class="editor">
     <a href="${t ? `#/t/${t.id}` : '#/'}" class="back">${t ? esc(t.name) : 'Hôm nay'}</a>
-    <h1>${t ? 'Sửa việc học' : 'Thêm việc học'}</h1>
+    <h1>${t ? 'Sửa topic' : 'Thêm topic học mới'}</h1>
+    ${t ? '' : topicImportPanel()}
     ${t ? '' : `<div class="row gap wrap tpl"><span class="small muted">Bắt đầu nhanh:</span>${Object.keys(TEMPLATES).map((k) => `<button type="button" class="chip" data-tpl="${k}">${TEMPLATE_LABEL[k]}</button>`).join('')}</div>`}
     <form class="track-form" novalidate>
       <fieldset class="card"><legend>Học gì</legend>
@@ -156,8 +255,8 @@ export function trackEditor(id?: string): View {
         <div class="field"><span>Màu</span><div class="colors">${COLORS.map((c) => `<label><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>
       </fieldset>
       <fieldset class="card"><legend>Học mỗi ngày như thế nào</legend>
-        <label class="field"><span>Bước nhỏ nhất vẫn được tính</span><input name="tiny" maxlength="300" value="${esc(t?.tinyAction ?? '')}" placeholder="Nhỏ đến mức ngày mệt nhất vẫn làm được, ví dụ: mở docs đọc 10 phút"></label>
-        <label class="field"><span>Kế hoạch khi nào, ở đâu</span><input name="plan" maxlength="300" value="${esc(t?.plan ?? '')}" placeholder="Sau khi [việc quen thuộc], tôi sẽ [bước nhỏ] tại [nơi]"></label>
+        <label class="field"><span>Việc nhỏ nhất vẫn được tính</span><input name="tiny" maxlength="300" value="${esc(t?.tinyAction ?? '')}" placeholder="Nhỏ đến mức ngày mệt nhất vẫn làm được, ví dụ: mở docs đọc 10 phút"></label>
+        <label class="field"><span>Kế hoạch khi nào, ở đâu</span><input name="plan" maxlength="300" value="${esc(t?.plan ?? '')}" placeholder="Sau khi [việc quen thuộc], tôi sẽ [học một chút] tại [nơi]"></label>
         <div class="grid2">
           <label class="field"><span>Mục tiêu mỗi tuần</span><div class="row gap"><input type="number" name="target" min="1" max="7" value="${t?.weeklyTarget ?? 4}" class="num"><span class="muted">ngày</span></div></label>
           <div class="field"><span>Ngày nghỉ cố định</span>${weekdayPicker(t?.restDays ?? [])}</div>
@@ -166,29 +265,30 @@ export function trackEditor(id?: string): View {
       </fieldset>
       ${t ? '' : `<fieldset class="card rm-quick"><legend>Lộ trình (không bắt buộc)</legend>
         <label class="field"><span>Có sẵn giáo trình hay danh sách bài? Dán vào đây, mỗi dòng một mục</span><textarea name="roadmap" rows="5" spellcheck="false" placeholder="# Phần 1: Nhập môn&#10;- Bài 1: Giới thiệu (20m)&#10;- Bài 2: Cài đặt (45m)"></textarea></label>
-        <p class="small muted rm-quick-sum">App sẽ tách thành từng mục, chia thành các đợt 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.</p>
+        <p class="small muted rm-quick-sum">App sẽ tách thành từng mục, chia thành các sprint 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.</p>
       </fieldset>`}
-      ${t ? '' : `<fieldset class="card first-sprint"><legend>Đợt học đầu tiên (2 đến 4 tuần)</legend>
-        <label class="field"><span>Tên đợt</span><input name="sprint" maxlength="200" placeholder="Ví dụ: GitOps với Argo CD"></label>
-        <label class="field"><span>Sản phẩm cụ thể ở cuối đợt</span><input name="deliverable" maxlength="500" placeholder="Thứ có thể cho người khác xem: repo, video, bản ghi âm, bài viết"></label>
+      ${t ? '' : `<fieldset class="card first-sprint"><legend>Sprint đầu tiên (2 đến 4 tuần)</legend>
+        <label class="field"><span>Tên sprint</span><input name="sprint" maxlength="200" placeholder="Ví dụ: GitOps với Argo CD"></label>
+        <label class="field"><span>Sản phẩm cụ thể ở cuối sprint</span><input name="deliverable" maxlength="500" placeholder="Thứ có thể cho người khác xem: repo, video, bản ghi âm, bài viết"></label>
         <div class="grid2">
           <label class="field"><span>Bắt đầu</span><input type="date" name="start" value="${d}"></label>
           <div class="field"><span>Độ dài</span><div class="seg-inline">${[2, 3, 4].map((w) => `<label><input type="radio" name="weeks" value="${w}" ${w === 3 ? 'checked' : ''}><span>${w} tuần</span></label>`).join('')}</div></div>
         </div>
-        <label class="field"><span>Các mốc, mỗi dòng một mốc</span><textarea name="milestones" rows="4" placeholder="3-5 mốc, mỗi mốc ra được một thứ nhìn thấy được"></textarea></label>
-        <p class="small muted">Bạn có thể bỏ trống phần này và đặt đợt học sau.</p>
+        <label class="field"><span>Các milestone, mỗi dòng một milestone</span><textarea name="milestones" rows="4" placeholder="3-5 milestone, mỗi milestone ra được một thứ nhìn thấy được"></textarea></label>
+        <p class="small muted">Bạn có thể bỏ trống phần này và đặt sprint sau.</p>
       </fieldset>`}
       <p class="err" role="alert"></p>
       <div class="row gap between wrap">
         <div class="row gap">${t ? `<button type="button" class="btn ghost danger" data-act="archive" data-id="${t.id}">${t.archived ? 'Hiện lại' : 'Lưu trữ'}</button><button type="button" class="btn ghost danger" data-act="del-track" data-id="${t.id}">Xoá</button>` : ''}</div>
-        <button class="btn primary">${t ? 'Lưu thay đổi' : 'Tạo việc học'}</button>
+        <button class="btn primary">${t ? 'Lưu thay đổi' : 'Tạo topic'}</button>
       </div>
     </form>
   </section>`;
   return {
-    title: t ? 'Sửa việc học' : 'Thêm việc học',
+    title: t ? 'Sửa topic' : 'Thêm topic học mới',
     html,
     mount(root) {
+      if (!t) bindTopicImport(root);
       const form = root.querySelector<HTMLFormElement>('.track-form')!;
       const f = (n: string) => form.elements.namedItem(n) as HTMLInputElement | null;
       root.querySelectorAll<HTMLElement>('[data-tpl]').forEach((b) =>
@@ -206,9 +306,9 @@ export function trackEditor(id?: string): View {
         const r = rmParse();
         const sum = root.querySelector('.rm-quick-sum')!;
         const n = r?.items.length ?? 0;
-        let msg = 'App sẽ tách thành từng mục, chia thành các đợt 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.';
+        let msg = 'App sẽ tách thành từng mục, chia thành các sprint 3 tuần và tính tiến độ cho cả lộ trình. Bạn có thể sửa mọi thứ sau.';
         if (rmText.value.trim() && !n) { try { parseRoadmapInput(rmText.value); msg = 'Chưa nhận ra mục nào.'; } catch (x) { msg = (x as Error).message; } }
-        if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Khi tạo việc học, app chia luôn thành các đợt 3 tuần; phần "Đợt học đầu tiên" bên dưới không cần điền.`;
+        if (n) msg = `Đã nhận ${n} mục${r!.phases.length ? ` trong ${r!.phases.length} phần` : ''}. Khi tạo topic, app chia luôn thành các sprint 3 tuần; phần "Sprint đầu tiên" bên dưới không cần điền.`;
         sum.textContent = msg;
         root.querySelector<HTMLElement>('.first-sprint')!.hidden = n > 0;
       });
@@ -216,7 +316,7 @@ export function trackEditor(id?: string): View {
         e.preventDefault();
         const err = form.querySelector('.err')!;
         const name = f('name')!.value.trim();
-        if (!name) { err.textContent = 'Hãy đặt tên cho việc học.'; f('name')!.focus(); return; }
+        if (!name) { err.textContent = 'Hãy đặt tên cho topic.'; f('name')!.focus(); return; }
         const rest = [...form.querySelectorAll<HTMLInputElement>('[name="rest"]:checked')].map((c) => Number(c.value));
         const target = Math.max(1, Math.min(7, Math.round(Number(f('target')!.value) || 4)));
         if (target > 7 - rest.length) { err.textContent = `Với ${rest.length} ngày nghỉ cố định, mục tiêu tối đa là ${7 - rest.length} ngày mỗi tuần.`; return; }
@@ -241,7 +341,7 @@ export function trackEditor(id?: string): View {
           const x = importChanges(track, rm, { weeks: 3, plan: true, replace: false, sessionMinutes: costPrefs(track).sessionMinutes, itemsPerSession: costPrefs(track).itemsPerSession });
           await saveTrack(track);
           await commit(x.newItems, x.changes?.create ?? []);
-          toast(`Đã tạo việc học với lộ trình ${x.newItems.length} mục và ${x.changes?.create.length ?? 0} đợt học.`);
+          toast(`Đã tạo topic với lộ trình ${x.newItems.length} mục và ${x.changes?.create.length ?? 0} sprint.`);
           location.hash = `#/t/${track.id}`;
           return;
         }
@@ -252,14 +352,14 @@ export function trackEditor(id?: string): View {
             const start = f('start')!.value || d;
             const weeks = Number(form.querySelector<HTMLInputElement>('[name="weeks"]:checked')?.value ?? 3);
             sprint = {
-              id: newId(), trackId: track.id, title: title || 'Đợt đầu tiên', deliverable: f('deliverable')!.value.trim(), start, end: defaultEnd(start, weeks),
+              id: newId(), trackId: track.id, title: title || 'Sprint đầu tiên', deliverable: f('deliverable')!.value.trim(), start, end: defaultEnd(start, weeks),
               milestones: ms.slice(0, 12).map((text) => ({ id: newId(), text, done: false })), status: 'active',
             };
           }
         }
         await saveTrack(track);
         if (sprint) await saveSprint(sprint);
-        toast(t ? 'Đã lưu thay đổi.' : 'Đã tạo việc học. Bạn có thể làm bước nhỏ đầu tiên ngay hôm nay.');
+        toast(t ? 'Đã lưu thay đổi.' : 'Đã tạo topic. Bạn có thể học một chút ngay hôm nay.');
         location.hash = `#/t/${track.id}`;
       });
     },
@@ -273,26 +373,26 @@ export function sprintEditor(t: Track, sprintId?: string): View {
   const end = s?.end ?? defaultEnd(d, 3);
   const html = `<section class="editor">
     <a href="#/t/${t.id}" class="back">${esc(t.name)}</a>
-    <h1>${s ? 'Sửa đợt học' : 'Đợt học mới'}</h1>
+    <h1>${s ? 'Sửa sprint' : 'Sprint mới'}</h1>
     <form class="sprint-form card" novalidate>
-      <label class="field"><span>Tên đợt</span><input name="title" required maxlength="200" value="${esc(s?.title ?? '')}" placeholder="Ví dụ: Helm chart cho app Go"></label>
-      <label class="field"><span>Sản phẩm cụ thể ở cuối đợt</span><input name="deliverable" maxlength="500" value="${esc(s?.deliverable ?? '')}" placeholder="Thứ có thể cho người khác xem"></label>
+      <label class="field"><span>Tên sprint</span><input name="title" required maxlength="200" value="${esc(s?.title ?? '')}" placeholder="Ví dụ: Helm chart cho app Go"></label>
+      <label class="field"><span>Sản phẩm cụ thể ở cuối sprint</span><input name="deliverable" maxlength="500" value="${esc(s?.deliverable ?? '')}" placeholder="Thứ có thể cho người khác xem"></label>
       <div class="grid2">
         <label class="field"><span>Bắt đầu</span><input type="date" name="start" value="${start}"></label>
         <label class="field"><span>Kết thúc</span><input type="date" name="end" value="${end}"></label>
       </div>
       <div class="row gap wrap">${[2, 3, 4].map((w) => `<button type="button" class="chip" data-weeks="${w}">${w} tuần</button>`).join('')}</div>
       <p class="small warn-text len-warn">${esc(lengthWarning(start, end) ?? '')}</p>
-      ${s ? '<p class="small muted">Bạn có thể sửa từng mốc ngay trên trang của việc học.</p>' : `<label class="field"><span>Các mốc, mỗi dòng một mốc</span><textarea name="milestones" rows="5" placeholder="3-5 mốc, mỗi mốc ra được một thứ nhìn thấy được"></textarea></label>`}
+      ${s ? '<p class="small muted">Bạn có thể sửa từng milestone ngay trên trang của topic.</p>' : `<label class="field"><span>Các milestone, mỗi dòng một milestone</span><textarea name="milestones" rows="5" placeholder="3-5 milestone, mỗi milestone ra được một thứ nhìn thấy được"></textarea></label>`}
       <p class="err" role="alert"></p>
       <div class="row gap between wrap">
-        <div>${s ? `<button type="button" class="btn ghost danger" data-act="del-sprint" data-id="${s.id}">Xoá đợt học</button>` : ''}</div>
-        <button class="btn primary">${s ? 'Lưu thay đổi' : 'Bắt đầu đợt học'}</button>
+        <div>${s ? `<button type="button" class="btn ghost danger" data-act="del-sprint" data-id="${s.id}">Xoá sprint</button>` : ''}</div>
+        <button class="btn primary">${s ? 'Lưu thay đổi' : 'Bắt đầu sprint'}</button>
       </div>
     </form>
   </section>`;
   return {
-    title: s ? 'Sửa đợt học' : 'Đợt học mới',
+    title: s ? 'Sửa sprint' : 'Sprint mới',
     html,
     mount(root) {
       const form = root.querySelector<HTMLFormElement>('.sprint-form')!;
@@ -306,7 +406,7 @@ export function sprintEditor(t: Track, sprintId?: string): View {
         const title = f('title').value.trim();
         const st = f('start').value;
         const en = f('end').value;
-        if (!title) { err.textContent = 'Hãy đặt tên cho đợt học.'; return; }
+        if (!title) { err.textContent = 'Hãy đặt tên cho sprint.'; return; }
         if (!st || !en || en < st) { err.textContent = 'Ngày kết thúc phải sau ngày bắt đầu.'; return; }
         const ms = s ? s.milestones : (form.elements.namedItem('milestones') as HTMLTextAreaElement).value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12).map((text) => ({ id: newId(), text, done: false }));
         const sprint: Sprint = { ...(s ?? { id: newId(), trackId: t.id, status: 'active' as const }), title, deliverable: f('deliverable').value.trim(), start: st, end: en, milestones: ms } as Sprint;
@@ -316,7 +416,7 @@ export function sprintEditor(t: Track, sprintId?: string): View {
           if (prev) await saveSprint({ ...prev, status: 'dropped', closedOn: d });
         }
         await saveSprint(sprint);
-        toast(s ? 'Đã lưu đợt học.' : 'Đã bắt đầu đợt học mới.');
+        toast(s ? 'Đã lưu sprint.' : 'Đã bắt đầu sprint mới.');
         location.hash = `#/t/${t.id}`;
       });
     },

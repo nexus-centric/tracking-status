@@ -61,7 +61,7 @@ export function normSprint(v: unknown): Sprint | null {
   return {
     id,
     trackId,
-    title: str(o.title, 200).trim() || 'Đợt học',
+    title: str(o.title, 200).trim() || 'Sprint',
     deliverable: str(o.deliverable, 500),
     start: o.start,
     end: o.end,

@@ -43,8 +43,40 @@ lưu (JSON)" regularly; restore with "Khôi phục từ file", which shows count
 (replace needs an extra confirmation). Today shows a reminder when the last export is 14 or more days old and
 there are at least 5 real logs.
 
-Demo data is generated on demand by `src/core/demo.ts` relative to today, flagged `demo: true`, shown with a
-banner, and removable without touching real records. It is used for trying the app and for screenshots.
+Demo data is generated on demand by `src/core/demo.ts` relative to today, flagged `demo: true`, and removable
+from Settings without touching real records. It is used for trying the app and for screenshots.
+
+
+## Import topics from JSON
+
+This is separate from Settings backup import/export (which saves or restores the whole database). On
+"Thêm topic học mới" you can paste JSON or choose a `.json` file that describes one topic or a list of topics,
+each with a lesson list. The form previews the counts, then creates the topics (and 3-week sprints when there
+are lessons). A sample file is at [docs/topic-import.sample.json](docs/topic-import.sample.json).
+
+Accepted shapes: a single topic object, an array of topics, or `{ "topics": [ ... ] }`.
+
+```json
+{
+  "title": "Kubernetes căn bản",
+  "description": "Optional; stored as the topic's why",
+  "tinyAction": "optional smallest step that still counts",
+  "plan": "optional when/where plan",
+  "weeklyTarget": 4,
+  "lessons": [
+    {
+      "title": "Tổng quan kiến trúc",
+      "url": "https://kubernetes.io/docs/concepts/overview/",
+      "phase": "optional section name",
+      "estimate": { "unit": "min", "value": 45 }
+    }
+  ]
+}
+```
+
+Aliases: `name` for `title`, `why` for `description`, `items` for `lessons`, `link` for `url`. `estimate` may
+also be a number of minutes. A Settings backup (`app: "nhip"`) is rejected here with a pointer to Settings.
+Invalid JSON and missing titles get a Vietnamese error before anything is saved.
 
 ## Run locally
 
@@ -79,7 +111,7 @@ https://nexus-centric.github.io/tracking-status/. Dependabot checks npm and GitH
 
 ```
 src/core/      pure logic: dates, rhythm, sprint, roadmap parser/progress/planner, schema, summary, re-entry,
-               backup bundle, timer math, brand, demo data
+               backup bundle, timer math, brand, demo data, topic JSON import
 src/views/     page and dialog rendering (Today, timer, track, roadmap, planner, week, results, settings)
 src/session.ts timer runtime: persistence, ticking, notifications, chime, wake lock
 src/db.ts      IndexedDB persistence

@@ -26,8 +26,8 @@ export function weekView(params: URLSearchParams): View {
     <div class="row gap"><a class="btn ghost small" href="#/week?w=${addDays(monday, -7)}">Tuần trước</a>${monday < cur ? `<a class="btn ghost small" href="#/week?w=${addDays(monday, 7)}">Tuần sau</a>` : ''}</div>
   </section>
   <section class="card">
-    <table class="wk-table"><thead><tr><th>Việc học</th><th>Số ngày</th><th>Thời gian</th><th>Mốc hoàn thành</th></tr></thead><tbody>
-    ${s.tracks.map((t) => `<tr><td>${colorDot(t.track)}<a href="#/t/${t.track.id}">${esc(t.track.name)}</a></td><td>${t.paused && !t.week.done ? '<span class="muted">tạm dừng</span>' : `${t.week.done}/${t.week.target} <span class="small muted">${stateText[t.week.state]}</span>`}</td><td>${fmtMinutes(t.minutes)}</td><td>${t.milestones.length}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tuần này chưa có việc học nào.</td></tr>'}
+    <table class="wk-table"><thead><tr><th>Topic</th><th>Số ngày</th><th>Thời gian</th><th>Milestone đã xong</th></tr></thead><tbody>
+    ${s.tracks.map((t) => `<tr><td>${colorDot(t.track)}<a href="#/t/${t.track.id}">${esc(t.track.name)}</a></td><td>${t.paused && !t.week.done ? '<span class="muted">tạm dừng</span>' : `${t.week.done}/${t.week.target} <span class="small muted">${stateText[t.week.state]}</span>`}</td><td>${fmtMinutes(t.minutes)}</td><td>${t.milestones.length}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Tuần này chưa có topic nào.</td></tr>'}
     </tbody></table>
   </section>
   <section class="week-grid">
@@ -111,13 +111,13 @@ export function settingsView(): View {
   <section class="card backup-card${due ? ' due' : ''}">
     <h2>Sao lưu và khôi phục</h2>
     <p class="backup-last ${due ? 'warn-text' : 'muted'}">${lastText}${due ? ' Bạn nên tải một bản mới.' : ''}</p>
-    <p class="muted small">Hiện có ${b.tracks.length} việc học, ${b.roadmap.length} mục lộ trình, ${b.logs.length} buổi học, khoảng ${(size / 1024).toFixed(0)} KB. Xoá dữ liệu trình duyệt sẽ xoá luôn dữ liệu của app, nên hãy giữ một bản sao lưu ở nơi khác, ví dụ Google Drive.</p>
+    <p class="muted small">Hiện có ${b.tracks.length} topic, ${b.roadmap.length} mục lộ trình, ${b.logs.length} buổi học, khoảng ${(size / 1024).toFixed(0)} KB. Xoá dữ liệu trình duyệt sẽ xoá luôn dữ liệu của app, nên hãy giữ một bản sao lưu ở nơi khác, ví dụ Google Drive.</p>
     <div class="row gap wrap"><button class="btn primary" data-act="export">Tải bản sao lưu (JSON)</button><label class="btn file-btn">Khôi phục từ file<input type="file" accept="application/json,.json" data-act="import" hidden></label></div>
     <p class="small muted">Khi khôi phục, app cho bạn xem trước số lượng và chọn gộp vào dữ liệu hiện có hoặc thay toàn bộ. File sao lưu theo định dạng phiên bản ${BUNDLE_VERSION}.</p>
     <p class="small muted persist-line" data-persist>Đang kiểm tra chế độ lưu trữ của trình duyệt...</p>
   </section>
   ${state.tracks.some((t) => t.archived) ? `<section class="card">
-    <h2>Việc học đã lưu trữ</h2>
+    <h2>Topic đã lưu trữ</h2>
     <ul class="past">${state.tracks.filter((t) => t.archived).map((t) => `<li class="row between">${colorDot(t)}<a href="#/t/${t.id}" class="grow">${esc(t.name)}</a><button class="btn small" data-act="archive" data-id="${t.id}">Hiện lại</button></li>`).join('')}</ul>
   </section>` : ''}
   <section class="card">
@@ -126,12 +126,12 @@ export function settingsView(): View {
   </section>
   <section class="card">
     <h2>Ngày bận</h2>
-    <label class="field"><span>Số ngày bận được giữ chuỗi mỗi tháng, cho mỗi việc học</span><div class="row gap"><input type="number" min="0" max="10" value="${state.settings.busyPerMonth}" class="num" data-act="busy-limit"><span class="muted">ngày</span></div></label>
+    <label class="field"><span>Số ngày bận được giữ chuỗi mỗi tháng, cho mỗi topic</span><div class="row gap"><input type="number" min="0" max="10" value="${state.settings.busyPerMonth}" class="num" data-act="busy-limit"><span class="muted">ngày</span></div></label>
     <p class="small muted">Ngày bận không làm đứt chuỗi ngày học. Giới hạn nhỏ giúp nó vẫn là ngoại lệ chứ không thành thói quen. Ngày nghỉ cố định trong tuần thì không bị giới hạn.</p>
   </section>
   <section class="card">
     <h2>Dữ liệu mẫu</h2>
-    <p class="muted small">Ba việc học mẫu (DevOps, dựng video, đọc sách) với lịch sử khoảng 6 tuần. Dữ liệu mẫu được đánh dấu riêng và có thể xoá mà không ảnh hưởng dữ liệu thật.</p>
+    <p class="muted small">Ba topic mẫu (DevOps, dựng video, đọc sách) với lịch sử khoảng 6 tuần. Dữ liệu mẫu được đánh dấu riêng và có thể xoá mà không ảnh hưởng dữ liệu thật.</p>
     <div class="row gap wrap">${hasDemo() ? '<button class="btn" data-act="remove-demo">Xoá dữ liệu mẫu</button>' : '<button class="btn" data-act="load-demo">Thêm dữ liệu mẫu</button>'}</div>
   </section>
   <section class="card">
@@ -141,13 +141,13 @@ export function settingsView(): View {
       <li><b>Mục tiêu tuần</b>: số ngày cần học từ thứ Hai đến Chủ nhật. Tuần có ngày bận hoặc tạm dừng thì mục tiêu giảm theo số ngày còn lại.</li>
       <li><b>Số tuần liên tiếp đạt mục tiêu</b>: thay cho chuỗi ngày liên tục. Lỡ một ngày vẫn không sao nếu tuần đó đạt mục tiêu.</li>
       <li><b>Độ đều đặn (0-100)</b>: trung bình trượt theo hàm mũ, giống cách Loop Habit Tracker tính. Học đều thì điểm tăng dần, nghỉ một ngày chỉ giảm chút ít, quay lại vài buổi là hồi phục.</li>
-      <li><b>Không bỏ lỡ hai ngày liền</b>: lỡ một ngày thì app nhắc bạn làm một bước nhỏ hôm nay. Lỡ từ hai ngày trở lên, app gợi ý bắt đầu lại bằng bước nhỏ nhất, không bắt học bù.</li>
+      <li><b>Không bỏ lỡ hai ngày liền</b>: lỡ một ngày thì app nhắc bạn học một chút hôm nay. Lỡ từ hai ngày trở lên, app gợi ý bắt đầu lại bằng việc nhỏ nhất, không bắt học bù.</li>
       <li><b>Đồng hồ buổi học</b>: Pomodoro chỉ tính thời gian tập trung; đếm ngược và bấm giờ tự do tính toàn bộ thời gian chạy, trừ lúc tạm dừng.</li>
     </ul>
   </section>
   <section class="card danger-zone">
     <h2>Xoá toàn bộ dữ liệu</h2>
-    <p class="muted small">Xoá mọi việc học, buổi học và nhận xét trong trình duyệt này. Hãy tải bản sao lưu trước.</p>
+    <p class="muted small">Xoá mọi topic, buổi học và nhận xét trong trình duyệt này. Hãy tải bản sao lưu trước.</p>
     <button class="btn ghost danger" data-act="wipe">Xoá toàn bộ dữ liệu</button>
   </section>`;
   return {

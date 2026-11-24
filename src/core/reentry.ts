@@ -21,7 +21,7 @@ export function reentry(track: Track, sprints: Sprint[], logs: LogEntry[], today
   const next = sprint?.milestones.find((m) => !m.done);
   let step: string;
   if (track.nextStep.trim()) step = track.nextStep.trim();
-  else if (next) step = `Làm 10 phút đầu tiên cho mốc: ${next.text}`;
+  else if (next) step = `Làm 10 phút đầu tiên cho milestone: ${next.text}`;
   else step = track.tinyAction.trim() || 'Mở lại tài liệu và làm 10 phút';
   const wd = weekday(today);
   return {

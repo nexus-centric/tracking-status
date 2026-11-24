@@ -66,7 +66,7 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
     if (!s) return '';
     const list = s.milestones.filter((m) => !m.done || m.id === existing?.milestoneId);
     if (!list.length) return '';
-    return `<label class="field"><span>Buổi này có hoàn thành mốc nào không?</span><select name="milestone"><option value="">Chưa</option>${list
+    return `<label class="field"><span>Buổi này có hoàn thành milestone nào không?</span><select name="milestone"><option value="">Chưa</option>${list
       .map((m) => `<option value="${s.id}:${m.id}" ${m.id === existing?.milestoneId ? 'selected' : ''}>${esc(m.text)}</option>`)
       .join('')}</select></label>`;
   };
@@ -78,7 +78,7 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       <label class="field"><span>Ngày</span><input type="date" name="day" value="${existing?.day ?? opts.day ?? d}" max="${d}" required></label>
     </div>
     <fieldset class="seg-field"><legend>Loại</legend>
-      <label><input type="radio" name="kind" value="tiny" ${kind === 'tiny' ? 'checked' : ''}><span>Bước nhỏ</span></label>
+      <label><input type="radio" name="kind" value="tiny" ${kind === 'tiny' ? 'checked' : ''}><span>Học một chút</span></label>
       <label><input type="radio" name="kind" value="full" ${kind === 'full' ? 'checked' : ''}><span>Buổi học đầy đủ</span></label>
     </fieldset>
     <div class="field"><span>Thời gian (phút, không bắt buộc)</span>
@@ -190,7 +190,7 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
     if (next !== track!.nextStep) await saveTrack({ ...track!, nextStep: next });
     opts.onSaved?.();
     dlg.close();
-    toast(existing ? 'Đã cập nhật buổi học.' : `Đã ghi ${k === 'tiny' ? 'bước nhỏ' : 'buổi học'} ${day === d ? 'hôm nay' : 'ngày ' + fmtDay(day)}.`);
+    toast(existing ? 'Đã cập nhật buổi học.' : `Đã ghi ${k === 'tiny' ? 'lần học ngắn' : 'buổi học'} ${day === d ? 'hôm nay' : 'ngày ' + fmtDay(day)}.`);
   });
 }
 
@@ -199,7 +199,7 @@ export function openQuickLog(preferredId?: string): void {
   const d = today();
   const choices = loggableTracks();
   if (!choices.length) {
-    toast('Chưa có việc học nào để ghi. Hãy thêm một việc học, hoặc mở lại việc đang tạm dừng.');
+    toast('Chưa có topic nào để ghi. Hãy thêm một topic, hoặc mở lại topic đang tạm dừng.');
     return;
   }
   const prefs = loadPrefs(prefsStorage());
@@ -211,7 +211,7 @@ export function openQuickLog(preferredId?: string): void {
   let kind: LogKind = prefs.kind;
   let minutes = defaultMinutes(prefs, kind);
 
-  const labelFor = () => (kind === 'tiny' ? 'Lưu bước nhỏ' : 'Lưu buổi học');
+  const labelFor = () => (kind === 'tiny' ? 'Lưu lần học ngắn' : 'Lưu buổi học');
 
   const dlg = openModal(`<form class="quick-form" method="dialog" novalidate>
     <header class="modal-head"><h2>Ghi nhanh</h2><button type="button" class="link-btn" data-close>Đóng</button></header>
@@ -219,7 +219,7 @@ export function openQuickLog(preferredId?: string): void {
       <div class="row gap wrap track-picks">${choices.map((t) => `<button type="button" class="chip${t.id === track.id ? ' on' : ''}" data-pick="${t.id}">${colorDot(t)}${esc(t.name)}</button>`).join('')}</div>
     </div>
     <fieldset class="seg-field"><legend>Loại</legend>
-      <label><input type="radio" name="kind" value="tiny" ${kind === 'tiny' ? 'checked' : ''}><span>Bước nhỏ</span></label>
+      <label><input type="radio" name="kind" value="tiny" ${kind === 'tiny' ? 'checked' : ''}><span>Học một chút</span></label>
       <label><input type="radio" name="kind" value="full" ${kind === 'full' ? 'checked' : ''}><span>Buổi học đầy đủ</span></label>
     </fieldset>
     <div class="field"><span>Thời gian (phút, không bắt buộc)</span>
@@ -284,13 +284,13 @@ export function openQuickLog(preferredId?: string): void {
     };
     await saveLog(entry);
     dlg.close();
-    toast(`Đã ghi ${kind === 'tiny' ? 'bước nhỏ' : 'buổi học'} của hôm nay.`);
+    toast(`Đã ghi ${kind === 'tiny' ? 'lần học ngắn' : 'buổi học'} của hôm nay.`);
   });
 }
 
 export function openPauseDialog(t: Track): void {
   const dlg = openModal(`<form method="dialog">
-    <header class="modal-head"><h2>Tạm dừng việc học "${esc(t.name)}"</h2><button type="button" class="link-btn" data-close>Đóng</button></header>
+    <header class="modal-head"><h2>Tạm dừng topic "${esc(t.name)}"</h2><button type="button" class="link-btn" data-close>Đóng</button></header>
     <p class="muted">Những ngày tạm dừng không bị tính là bỏ lỡ và không làm giảm độ đều đặn. Bạn có thể quay lại bất cứ lúc nào.</p>
     <label class="field"><span>Lý do (không bắt buộc)</span><input name="note" placeholder="Ví dụ: dồn sức cho việc khác trong tháng này"></label>
     <label class="field"><span>Bước nhỏ nhất để bắt đầu lại</span><input name="next" value="${esc(t.nextStep)}" placeholder="Ví dụ: mở file values.yaml và đọc lại 10 dòng đầu"></label>
@@ -315,7 +315,7 @@ export async function resumeTrack(t: Track, day?: string): Promise<void> {
     .map((p) => (p.to === undefined || p.to >= d ? { ...p, to: addDays(start, -1) } : p))
     .filter((p) => p.to === undefined || p.to >= p.from);
   await saveTrack({ ...t, pauses });
-  toast(start === d ? 'Chào mừng bạn quay lại. Hôm nay chỉ cần một bước nhỏ là đủ.' : `Đã hẹn quay lại vào ngày ${fmtDay(start)}.`);
+  toast(start === d ? 'Chào mừng bạn quay lại. Hôm nay chỉ cần học một chút là đủ.' : `Đã hẹn quay lại vào ngày ${fmtDay(start)}.`);
 }
 
 export function openFinishSprint(sprintId: string): void {
@@ -323,11 +323,11 @@ export function openFinishSprint(sprintId: string): void {
   if (!s) return;
   const done = s.milestones.filter((m) => m.done).length;
   const dlg = openModal(`<form method="dialog">
-    <header class="modal-head"><h2>Kết thúc đợt học "${esc(s.title)}"</h2><button type="button" class="link-btn" data-close>Đóng</button></header>
-    <p class="muted">Bạn đã xong ${done}/${s.milestones.length} mốc. Sản phẩm dự kiến: ${esc(s.deliverable || 'chưa ghi')}</p>
+    <header class="modal-head"><h2>Kết thúc sprint "${esc(s.title)}"</h2><button type="button" class="link-btn" data-close>Đóng</button></header>
+    <p class="muted">Bạn đã xong ${done}/${s.milestones.length} milestone. Sản phẩm dự kiến: ${esc(s.deliverable || 'chưa ghi')}</p>
     <fieldset class="seg-field"><legend>Kết quả</legend>
       <label><input type="radio" name="status" value="done" checked><span>Hoàn thành</span></label>
-      <label><input type="radio" name="status" value="dropped"><span>Dừng đợt học này</span></label>
+      <label><input type="radio" name="status" value="dropped"><span>Dừng sprint này</span></label>
     </fieldset>
     <label class="field"><span>Nhìn lại: điều gì hiệu quả, lần sau bạn muốn đổi gì</span><textarea name="reflection" rows="3">${esc(s.reflection ?? '')}</textarea></label>
     <footer class="modal-foot"><button type="button" class="btn ghost" data-close>Huỷ</button><button type="submit" class="btn primary">Lưu</button></footer>
@@ -339,7 +339,7 @@ export function openFinishSprint(sprintId: string): void {
     await saveSprint({ ...s, status, closedOn: today(), reflection: (f.elements.namedItem('reflection') as HTMLTextAreaElement).value.trim() || undefined });
     dlg.close();
     const nextPlanned = state.sprints.some((x) => x.trackId === s.trackId && x.status === 'planned');
-    toast(nextPlanned ? 'Đã khép lại đợt học. Đợt kế tiếp trong kế hoạch đang chờ bạn bắt đầu.' : status === 'done' ? 'Đã khép lại đợt học. Hãy đặt đợt tiếp theo khi bạn sẵn sàng.' : 'Đã dừng đợt học. Không sao cả, lần sau hãy đặt một đợt nhỏ hơn.');
+    toast(nextPlanned ? 'Đã kết thúc sprint. Sprint kế tiếp trong kế hoạch đang chờ bạn bắt đầu.' : status === 'done' ? 'Đã kết thúc sprint. Hãy đặt sprint tiếp theo khi bạn sẵn sàng.' : 'Đã dừng sprint. Không sao cả, lần sau hãy đặt một sprint nhỏ hơn.');
     location.hash = `#/t/${s.trackId}`;
   });
 }

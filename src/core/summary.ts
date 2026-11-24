@@ -64,10 +64,10 @@ export function buildWeekSummary(input: SummaryInput): WeekSummary {
     for (const s of input.sprints.filter((x) => x.trackId === track.id)) milestones.push(...milestonesDoneBetween(s, from, to).map((m) => m.text));
     if (sprint) {
       const p = sprintProgress(sprint, input.today);
-      sprintLine = `Đợt "${sprint.title}": ${p.done}/${p.total} mốc, ${sprint.status === 'active' ? `còn ${p.daysLeft} ngày, ` : ''}${PACE_LABEL[p.pace]}`;
+      sprintLine = `Sprint "${sprint.title}": ${p.done}/${p.total} milestone, ${sprint.status === 'active' ? `còn ${p.daysLeft} ngày, ` : ''}${PACE_LABEL[p.pace]}`;
       if (p.next) nextStep = p.next.text;
     }
-    if (track.nextStep) nextStep = track.nextStep + (nextStep && nextStep !== track.nextStep ? ` (mốc tiếp: ${nextStep})` : '');
+    if (track.nextStep) nextStep = track.nextStep + (nextStep && nextStep !== track.nextStep ? ` (milestone tiếp: ${nextStep})` : '');
     const evidence: string[] = [];
     const blockers: string[] = [];
     for (const l of logs.sort((a, b) => (a.day < b.day ? -1 : 1))) {
@@ -116,12 +116,12 @@ function renderText(s: WeekSummary, input: SummaryInput): string {
   for (const t of s.tracks) {
     lines.push('', `## ${t.track.name}: ${weekLine(t, input.today)}`);
     if (t.paused && t.week.done === 0) {
-      if (t.track.nextStep) lines.push(`- Bước nhỏ nhất khi quay lại: ${t.track.nextStep}`);
+      if (t.track.nextStep) lines.push(`- Việc nhỏ nhất khi quay lại: ${t.track.nextStep}`);
       continue;
     }
-    lines.push(`- Thời gian: ${fmtMinutes(t.minutes)}; ${t.full} buổi học đầy đủ, ${t.tiny} bước nhỏ`);
+    lines.push(`- Thời gian: ${fmtMinutes(t.minutes)}; ${t.full} buổi học đầy đủ, ${t.tiny} lần học ngắn`);
     if (t.sprintLine) lines.push(`- ${t.sprintLine}`);
-    if (t.milestones.length) lines.push(`- Mốc xong trong tuần: ${t.milestones.join('; ')}`);
+    if (t.milestones.length) lines.push(`- Milestone xong trong tuần: ${t.milestones.join('; ')}`);
     if (t.evidence.length) {
       lines.push('- Thành quả:');
       t.evidence.forEach((e) => lines.push(`  - ${e}`));

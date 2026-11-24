@@ -12,7 +12,7 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
     id: 'demo-devops', name: 'DevOps: GitOps với Argo CD', color: '#2f5bea', demo: true,
     why: 'Muốn tự dựng được luồng GitOps hoàn chỉnh để áp dụng cho dự án ở công ty.',
     tinyAction: 'Mở terminal, chạy một lệnh kubectl hoặc đọc một trang docs (10 phút)',
-    plan: 'Sau khi ăn tối xong, tôi mở laptop và làm bước nhỏ ngay tại bàn.',
+    plan: 'Sau khi ăn tối xong, tôi mở laptop và học một chút ngay tại bàn.',
     weeklyTarget: 5, restDays: [0], nextStep: '', pauses: [], archived: false, createdAt: d(-27),
   };
   const video: Track = {
@@ -88,7 +88,7 @@ export function demoBundle(today: Day): Omit<Bundle, 'exportedAt'> {
     [-24]: ['full', 45, 'Rolling update Deployment'], [-22]: ['full', 35, 'Service ClusterIP và NodePort'], [-20]: ['tiny', 10, 'Đọc về Ingress controller'],
     [-19]: ['full', 60, 'Cài ingress-nginx, expose app'], [-18]: ['tiny', 15, 'Ôn lệnh kubectl'], [-17]: ['full', 40, 'ConfigMap và Secret'],
     [-15]: ['full', 30, 'Viết nháp ghi chú'], [-14]: ['full', 45, 'Hoàn thiện ghi chú một trang'], [-12]: ['tiny', 10, 'Đọc getting started Argo CD'],
-    [-11]: ['full', 40, 'Lên kế hoạch đợt GitOps'], [-10]: ['tiny', 15, 'Cài k3d'], [-9]: ['full', 50, 'Dựng cluster k3d'],
+    [-11]: ['full', 40, 'Lên kế hoạch sprint GitOps'], [-10]: ['tiny', 15, 'Cài k3d'], [-9]: ['full', 50, 'Dựng cluster k3d'],
     [-8]: ['full', 30, 'Đọc kiến trúc Argo CD'], [-6]: ['full', 55, 'Cài Argo CD, đổi mật khẩu admin'], [-5]: ['tiny', 10, 'Xem Application CRD'],
     [-4]: ['full', 40, 'Tạo repo gitops-demo'], [-3]: ['tiny', 10, 'Đọc về sync policy'], [-2]: ['full', 60, 'App mẫu đã sync thành công'],
   };
