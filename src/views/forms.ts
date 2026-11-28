@@ -6,7 +6,8 @@ import { activeSprint } from '../core/sprint.js';
 import type { Evidence, LogEntry, LogKind, Track } from '../core/types.js';
 import { clientCenter, queueCelebration } from '../motion.js';
 import { ctxFor, getTrack, markMilestone, newId, saveLog, saveSprint, saveTrack, state } from '../state.js';
-import { $, esc, imageToDataUrl, isHttpUrl, openModal, toast } from '../ui.js';
+import { NOTE_MAX, SESSION_NOTE_MAX, formatNoteHtml } from '../core/notes.js';
+import { $, autosizeAll, esc, imageToDataUrl, isHttpUrl, openModal, toast } from '../ui.js';
 import { colorDot } from './parts.js';
 
 
@@ -46,7 +47,7 @@ function evidenceItem(e: Evidence, i: number): string {
       ? `<img src="${esc(e.value)}" alt="${esc(e.label || 'ảnh')}">`
       : e.kind === 'link'
         ? `<span class="ev-kind">Link</span><span class="ev-text">${esc(e.label ? e.label + ' - ' : '')}${esc(e.value)}</span>`
-        : `<span class="ev-kind">Ghi chú</span><span class="ev-text">${esc(e.value)}</span>`;
+        : `<span class="ev-kind">Ghi chú</span><div class="ev-text note-body">${formatNoteHtml(e.value)}</div>`;
   return `<li class="ev-item">${body}<button type="button" class="btn xs danger" data-rm="${i}" aria-label="Bỏ mục này">Bỏ</button></li>`;
 }
 
@@ -85,17 +86,19 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       <div class="row gap wrap"><input type="number" name="minutes" min="0" max="1440" inputmode="numeric" value="${startMinutes || ''}" class="num">
       ${minuteChips(startMinutes)}</div>
     </div>
-    <label class="field"><span>Bạn đã làm được gì</span><textarea name="note" rows="2" placeholder="Ví dụ: cài Argo CD, đổi mật khẩu admin">${esc(existing?.note ?? opts.note ?? '')}</textarea></label>
+    <label class="field"><span>Bạn đã làm được gì</span><textarea name="note" class="grow-ta" rows="2" maxlength="${NOTE_MAX}" data-maxh="200" placeholder="Ví dụ: cài Argo CD, đổi mật khẩu admin">${esc(existing?.note ?? opts.note ?? '')}</textarea></label>
+    <label class="field"><span>Ghi chú buổi học</span><textarea name="sessionNote" class="grow-ta" rows="4" maxlength="${SESSION_NOTE_MAX}" data-maxh="320" placeholder="Kiến thức quan trọng trong buổi này: công thức, lệnh, ý bạn muốn nhớ lại. Mỗi ý một dòng; có thể gạch đầu dòng và cách dòng.">${esc(existing?.sessionNote ?? '')}</textarea></label>
     <div class="ms-slot">${msOptions(track)}</div>
     <div class="field"><span>Thành quả để xem lại (không bắt buộc)</span>
       <ul class="ev-list"></ul>
       <div class="ev-add">
         <div class="row gap wrap"><input type="url" name="evUrl" placeholder="https://github.com/.../commit/..." class="grow"><input type="text" name="evLabel" placeholder="Mô tả ngắn" class="grow"><button type="button" class="btn small" data-ev="link">Thêm link</button></div>
-        <div class="row gap wrap"><input type="text" name="evNote" placeholder="Ghi chú: kết quả, điều bạn học được" class="grow"><button type="button" class="btn small" data-ev="note">Thêm ghi chú</button>
-        <label class="btn small file-btn">Thêm ảnh<input type="file" accept="image/*" name="evImg" hidden></label></div>
+        <div class="ev-note-add"><textarea name="evNote" class="grow-ta" rows="2" maxlength="${NOTE_MAX}" data-maxh="200" placeholder="Ghi chú thành quả: kết quả, điều bạn học được. Có thể nhiều dòng, gạch đầu dòng."></textarea>
+          <div class="col gap ev-note-acts"><button type="button" class="btn small" data-ev="note">Thêm ghi chú</button>
+          <label class="btn small file-btn">Thêm ảnh<input type="file" accept="image/*" name="evImg" hidden></label></div></div>
       </div>
     </div>
-    <label class="field"><span>Có chỗ nào còn vướng không</span><input type="text" name="blocker" value="${esc(existing?.blocker ?? '')}" placeholder="Để trống nếu không"></label>
+    <label class="field"><span>Có chỗ nào còn vướng không</span><textarea name="blocker" class="grow-ta" rows="2" maxlength="1000" data-maxh="160" placeholder="Để trống nếu không">${esc(existing?.blocker ?? '')}</textarea></label>
     <label class="field"><span>Bước nhỏ tiếp theo</span><input type="text" name="nextStep" value="${esc(track.nextStep)}" placeholder="Ghi lại để lần sau bắt tay vào ngay, kể cả sau nhiều ngày nghỉ"></label>
     <p class="err small" role="alert"></p>
     <footer class="modal-foot"><button type="button" class="btn ghost" data-close>Huỷ</button><button type="submit" class="btn primary">Lưu</button></footer>
@@ -109,6 +112,7 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
   };
   renderEv();
   const field = <T extends HTMLElement = HTMLInputElement>(n: string) => form.querySelector<T>(`[name="${n}"]`)!;
+  autosizeAll(form);
 
   form.addEventListener('click', (e) => {
     const el = e.target as HTMLElement;
@@ -126,7 +130,9 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       const v = field('evNote').value.trim();
       if (!v) return;
       evidence.push({ kind: 'note', value: v });
-      field('evNote').value = ''; renderEv();
+      field<HTMLTextAreaElement>('evNote').value = '';
+      field<HTMLTextAreaElement>('evNote').dispatchEvent(new Event('input'));
+      renderEv();
     }
   });
   form.addEventListener('change', async (e) => {
@@ -174,7 +180,8 @@ export function openLogDialog(trackId: string, opts: { logId?: string; kind?: Lo
       kind: k,
       minutes: Math.max(0, Math.min(1440, Math.round(Number(field('minutes').value) || 0))),
       note: field<HTMLTextAreaElement>('note').value.trim(),
-      blocker: field('blocker').value.trim(),
+      sessionNote: field<HTMLTextAreaElement>('sessionNote').value.trim() || undefined,
+      blocker: field<HTMLTextAreaElement>('blocker').value.trim(),
       milestoneId: msId || existing?.milestoneId,
       evidence,
       createdAt: existing?.createdAt ?? new Date().toISOString(),

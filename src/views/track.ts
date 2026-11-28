@@ -1,6 +1,7 @@
 // Track detail, track editor (new/edit) and sprint editor.
 import { fmtDay, today, weekdayShort } from '../core/dates.js';
 import { fmtMinutes } from '../core/format.js';
+import { noteBlock } from '../core/notes.js';
 import { currentlyPaused, last7, momentum, weekStreak } from '../core/rhythm.js';
 import { activeSprint, defaultEnd, lengthWarning, sprintProgress } from '../core/sprint.js';
 import type { Milestone, Sprint, Track } from '../core/types.js';
@@ -20,15 +21,21 @@ export const COLORS = ['#2f5bea', '#0e9f8f', '#7c5cff', '#d9480f', '#c2255c', '#
 
 function evidenceHtml(l: { evidence: { kind: string; value: string; label?: string }[] }): string {
   if (!l.evidence.length) return '';
-  return `<ul class="ev-inline">${l.evidence
-    .map((e) =>
-      e.kind === 'link'
-        ? `<li><a href="${esc(e.value)}" target="_blank" rel="noopener noreferrer">${esc(e.label || e.value)}</a></li>`
-        : e.kind === 'image'
-          ? `<li><button class="thumb" data-act="img" data-src="${esc(e.value)}"><img src="${esc(e.value)}" alt="${esc(e.label || 'ảnh thành quả')}"></button></li>`
-          : `<li class="ev-note">${esc(e.value)}</li>`,
-    )
-    .join('')}</ul>`;
+  const links = l.evidence.filter((e) => e.kind === 'link' || e.kind === 'image');
+  const notes = l.evidence.filter((e) => e.kind === 'note');
+  const chips = links.length
+    ? `<ul class="ev-inline">${links.map((e) =>
+        e.kind === 'link'
+          ? `<li><a href="${esc(e.value)}" target="_blank" rel="noopener noreferrer">${esc(e.label || e.value)}</a></li>`
+          : `<li><button class="thumb" data-act="img" data-src="${esc(e.value)}"><img src="${esc(e.value)}" alt="${esc(e.label || 'ảnh thành quả')}"></button></li>`,
+      ).join('')}</ul>`
+    : '';
+  const noteParts = notes.map((e) => noteBlock(e.value, 'ev-note')).join('');
+  return `${chips}${noteParts}`;
+}
+
+function logSection(label: string, body: string): string {
+  return body ? `<div class="log-sec"><span class="lbl">${label}</span>${body}</div>` : '';
 }
 
 export function trackView(id: string, params: URLSearchParams): View {
@@ -68,7 +75,7 @@ export function trackView(id: string, params: URLSearchParams): View {
     <div class="plan-box">
       <p><span class="lbl">Bước nhỏ</span>${esc(t.tinyAction || 'chưa đặt')}</p>
       <p><span class="lbl">Kế hoạch</span>${esc(t.plan || 'chưa đặt; bạn có thể thử mẫu "Sau khi ..., tôi sẽ ..."')}</p>
-      <p><span class="lbl">Bước tiếp theo</span>${esc(t.nextStep || 'chưa ghi')}</p>
+      <div><span class="lbl">Bước tiếp theo</span>${t.nextStep ? noteBlock(t.nextStep) : 'chưa ghi'}</div>
     </div>
   </section>
   ${roadmapCard(t)}
@@ -77,18 +84,40 @@ export function trackView(id: string, params: URLSearchParams): View {
   <section class="card">
     <h2>Các buổi học đã ghi</h2>
     ${logs.length ? `<ol class="logs">${logs.slice(0, 60).map((l) => `<li class="log">
-      <div class="log-day">${fmtDay(l.day, true)}</div>
-      <div class="log-body">
-        <p><span class="tag ${l.kind}">${l.kind === 'tiny' ? 'học một chút' : 'buổi học'}</span>${l.minutes ? `<span class="muted small">${fmtMinutes(l.minutes)}</span>` : ''} ${esc(l.note)}</p>
-        ${l.milestoneId ? `<p class="small ok-text">Hoàn thành milestone: ${esc(findMilestone(l.milestoneId)?.text ?? '')}</p>` : ''}
-        ${l.blocker ? `<p class="small warn-text">Chỗ vướng: ${esc(l.blocker)}</p>` : ''}
-        ${evidenceHtml(l)}
+      <div class="log-head">
+        <div class="log-day">${fmtDay(l.day, true)}</div>
+        <span class="tag ${l.kind}">${l.kind === 'tiny' ? 'học một chút' : 'buổi học'}</span>
+        ${l.minutes ? `<span class="muted small">${fmtMinutes(l.minutes)}</span>` : ''}
+        <div class="log-acts"><button class="btn xs" data-act="edit-log" data-id="${l.id}">Chỉnh sửa</button><button class="btn xs danger" data-act="del-log" data-id="${l.id}">Xoá</button></div>
       </div>
-      <div class="log-acts"><button class="btn xs" data-act="edit-log" data-id="${l.id}">Chỉnh sửa</button><button class="btn xs danger" data-act="del-log" data-id="${l.id}">Xoá</button></div>
+      <div class="log-body">
+        ${logSection('Đã làm', noteBlock(l.note))}
+        ${logSection('Ghi chú', noteBlock(l.sessionNote))}
+        ${l.milestoneId ? logSection('Milestone', `<p class="ok-text">Hoàn thành: ${esc(findMilestone(l.milestoneId)?.text ?? '')}</p>`) : ''}
+        ${logSection('Thành quả', evidenceHtml(l))}
+        ${logSection('Vướng', l.blocker ? `<div class="warn-text">${noteBlock(l.blocker)}</div>` : '')}
+      </div>
     </li>`).join('')}</ol>${logs.length > 60 ? `<p class="small muted">Đang hiện 60 buổi gần nhất. Bản sao lưu JSON có đầy đủ mọi buổi học.</p>` : ''}` : '<p class="muted">Bạn chưa ghi buổi học nào. Học một chút là đủ để bắt đầu.</p>'}
   </section>
   ${past.length ? `<section class="card"><h2>Các sprint trước</h2><ul class="past">${past.map((p) => `<li><b>${esc(p.title)}</b> <span class="small">${sprintMeta(p, d)}</span><br><span class="small muted">${fmtDay(p.start)} - ${fmtDay(p.end)} · ${esc(p.deliverable)}</span>${p.reflection ? `<p class="small">${esc(p.reflection)}</p>` : ''}</li>`).join('')}</ul></section>` : ''}`;
-  return { title: t.name, html };
+  return { title: t.name, html, mount: mountNoteClips };
+}
+
+/** Reveals a "Xem thêm" button on note blocks taller than about eight lines. */
+export function mountNoteClips(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>('[data-clip]').forEach((el) => {
+    el.classList.add('clipped');
+    if (el.scrollHeight <= el.clientHeight + 2) { el.classList.remove('clipped'); return; }
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn xs ghost note-more';
+    b.textContent = 'Xem thêm';
+    b.addEventListener('click', () => {
+      const open = el.classList.toggle('open');
+      b.textContent = open ? 'Thu gọn' : 'Xem thêm';
+    });
+    el.after(b);
+  });
 }
 
 function findMilestone(id: string): Milestone | undefined {

@@ -2,8 +2,8 @@
 // older file cannot put the app into a broken state.
 import { isDay } from './dates.js';
 import { APP_NAME } from './brand.js';
-import type { Bundle, DayMark, Estimate, Evidence, LogEntry, Milestone, Pause, RoadmapItem, Settings, Sprint, Track, WeekReview } from './types.js';
-import { DEFAULT_SETTINGS } from './types.js';
+import { DEFAULT_SETTINGS, type Bundle, type DayMark, type Estimate, type Evidence, type LogEntry, type Milestone, type Pause, type RoadmapItem, type Settings, type Sprint, type Track, type WeekReview } from './types.js';
+import { NOTE_MAX, SESSION_NOTE_MAX } from './notes.js';
 
 const str = (v: unknown, max = 4000): string => (typeof v === 'string' ? v.slice(0, max) : '');
 const num = (v: unknown, lo: number, hi: number, dflt: number): number => {
@@ -77,7 +77,7 @@ function evidence(v: unknown): Evidence | null {
   const o = obj(v);
   const kind = o.kind === 'link' || o.kind === 'note' || o.kind === 'image' ? o.kind : null;
   if (!kind) return null;
-  const value = str(o.value, kind === 'image' ? 3_000_000 : 2000).trim();
+  const value = str(o.value, kind === 'image' ? 3_000_000 : NOTE_MAX).trim();
   if (!value) return null;
   if (kind === 'image' && !/^data:image\/(png|jpeg|webp|gif);base64,/.test(value)) return null;
   if (kind === 'link' && !/^https?:\/\//i.test(value)) return null;
@@ -95,7 +95,8 @@ export function normLog(v: unknown): LogEntry | null {
     day: o.day,
     kind: o.kind === 'full' ? 'full' : 'tiny',
     minutes: num(o.minutes, 0, 24 * 60, 0),
-    note: str(o.note, 2000),
+    note: str(o.note, NOTE_MAX),
+    sessionNote: str(o.sessionNote, SESSION_NOTE_MAX) || undefined,
     blocker: str(o.blocker, 1000),
     milestoneId: str(o.milestoneId, 100) || undefined,
     evidence: arr(o.evidence).map(evidence).filter((e): e is Evidence => !!e),

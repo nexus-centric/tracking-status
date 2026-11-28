@@ -122,3 +122,20 @@ test('version 2 round-trip keeps roadmap, planned sprints and milestone links; v
   assert.equal(merged.added.roadmap, 1);
   assert.equal(merged.data.roadmap.length, 2);
 });
+
+test('sessionNote survives export and import; older logs without it still load', () => {
+  const demo = demoBundle('2026-11-15');
+  const withNote = { ...demo.logs[0], sessionNote: 'Công thức quan trọng:\n\n- E = mc^2\n- kubectl get pods', evidence: [{ kind: 'note' as const, value: 'Kết quả:\n- app Synced' }] };
+  const data = { ...demo, logs: [withNote, ...demo.logs.slice(1)] };
+  const { bundle, dropped } = parseBundle(JSON.stringify(makeBundle(data)));
+  assert.equal(dropped, 0);
+  assert.equal(bundle.logs[0].sessionNote, withNote.sessionNote);
+  assert.equal(bundle.logs[0].evidence[0].value, 'Kết quả:\n- app Synced');
+  const old = { app: 'nhip', version: 2, tracks: demo.tracks, sprints: demo.sprints, logs: [{ id: 'old', trackId: demo.tracks[0].id, day: '2026-11-02', kind: 'full', minutes: 20, note: 'chỉ có note cũ', blocker: '', evidence: [], createdAt: '2026-11-02T10:00:00Z' }], marks: [], reviews: [], roadmap: [] };
+  const loaded = parseBundle(JSON.stringify(old)).bundle;
+  assert.equal(loaded.logs[0].note, 'chỉ có note cũ');
+  assert.equal(loaded.logs[0].sessionNote, undefined);
+  const long = 'x'.repeat(9000);
+  const clipped = parseBundle(JSON.stringify({ ...old, logs: [{ ...old.logs[0], sessionNote: long }] })).bundle;
+  assert.equal(clipped.logs[0].sessionNote?.length, 8000);
+});

@@ -86,7 +86,8 @@ export interface LogEntry {
   day: Day;
   kind: LogKind;
   minutes: number; // 0 when not tracked
-  note: string;
+  note: string; // "Bạn đã làm được gì"
+  sessionNote?: string; // longer knowledge notes from the session; absent on older records
   blocker: string;
   milestoneId?: string; // milestone completed by this session
   evidence: Evidence[];

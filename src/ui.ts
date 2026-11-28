@@ -103,3 +103,19 @@ export function isHttpUrl(s: string): boolean {
     return false;
   }
 }
+
+/** Grows a textarea with its content, up to `maxPx`, then scrolls. The user can still resize it vertically. */
+export function autosize(el: HTMLTextAreaElement, maxPx = 280): void {
+  const fit = () => {
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, maxPx)}px`;
+    el.style.overflowY = el.scrollHeight > maxPx + 1 ? 'auto' : 'hidden';
+  };
+  el.style.overflowY = 'hidden';
+  el.addEventListener('input', fit);
+  requestAnimationFrame(fit);
+}
+
+export function autosizeAll(root: ParentNode, maxPx = 280): void {
+  root.querySelectorAll<HTMLTextAreaElement>('textarea.grow-ta').forEach((el) => autosize(el, Number(el.dataset.maxh) || maxPx));
+}

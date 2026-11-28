@@ -1,6 +1,7 @@
 // Weekly review, evidence log and settings.
 import { addDays, fmtDay, today, weekStart } from '../core/dates.js';
 import { fmtMinutes } from '../core/format.js';
+import { noteBlock } from '../core/notes.js';
 import { buildWeekSummary } from '../core/summary.js';
 import type { WeekReview } from '../core/types.js';
 import { exportBundle, hasDemo, saveReview, state } from '../state.js';
@@ -9,7 +10,7 @@ import { backupDue, daysSince } from '../core/backup.js';
 import { BUNDLE_VERSION } from '../core/bundle.js';
 import { lastBackup } from './today-extra.js';
 import { colorDot, weekRangeText } from './parts.js';
-import type { View } from './track.js';
+import { mountNoteClips, type View } from './track.js';
 
 export function weekView(params: URLSearchParams): View {
   const d = today();
@@ -93,10 +94,10 @@ export function evidenceView(params: URLSearchParams): View {
       ? `<button class="thumb big" data-act="img" data-src="${esc(e.value)}"><img src="${esc(e.value)}" alt="${esc(e.label || 'ảnh thành quả')}"></button>`
       : e.kind === 'link'
         ? `<a href="${esc(e.value)}" target="_blank" rel="noopener noreferrer" class="ev-link">${esc(e.label || e.value)}</a><span class="small muted url">${esc(e.value)}</span>`
-        : `<p>${esc(e.value)}</p>`;
-    return `<article class="card ev-card k-${e.kind}">${head}${body}${l.note ? `<p class="small muted">${esc(l.note)}</p>` : ''}</article>`;
+        : noteBlock(e.value);
+    return `<article class="card ev-card k-${e.kind}">${head}${body}${l.sessionNote ? noteBlock(l.sessionNote) : ''}${l.note ? noteBlock(l.note, 'muted-note') : ''}</article>`;
   }).join('')}</div></section>`).join('') : `<section class="card"><p class="muted">Chưa có thành quả nào. Khi ghi buổi học, bạn có thể thêm link commit, ghi chú kết quả hoặc ảnh chụp màn hình; chúng sẽ hiện ở đây thành danh sách những gì bạn đã làm ra.</p></section>`}`;
-  return { title: 'Thành quả', html };
+  return { title: 'Thành quả', html, mount: mountNoteClips };
 }
 
 export function settingsView(): View {

@@ -86,7 +86,7 @@ function stateLine(t: Track): string {
   switch (st) {
     case 'done': {
       const min = todayLogs.reduce((a, l) => a + l.minutes, 0);
-      const note = todayLogs.map((l) => l.note).filter(Boolean)[0];
+      const note = todayLogs.map((l) => (l.sessionNote || l.note).split(/\n/).find((x) => x.trim())).filter(Boolean)[0];
       return `<p class="state ok">Hôm nay bạn đã ghi${min ? ` ${fmtMinutes(min)}` : ' một lần học ngắn'}${note ? `: ${esc(note)}` : '.'}</p>`;
     }
     case 'rest':
