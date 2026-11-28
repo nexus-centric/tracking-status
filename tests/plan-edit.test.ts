@@ -92,8 +92,10 @@ test('editing the running sprint keeps finished and plain milestones and reuses 
   const t = track();
   let d = draftsFromSprints([planned, active], list, 't1');
   assert.deepEqual(d.map((x) => x.sprintId), ['s1', 's2'], 'running sprint first');
-  assert.deepEqual(d[0].itemIds, ['i2', 'i3', 'i4'], 'finished items are not editable');
+  assert.deepEqual(d[0].itemIds, ['i1', 'i2', 'i3', 'i4'], 'finished items stay in the draft so they remain visible');
   assert.equal(d[0].title, undefined, 'automatic title follows the items');
+  assert.equal(d[0].status, 'active');
+  assert.equal(d[0].locked, false);
   assert.equal(d[1].title, 'Kế tiếp');
   d = moveItems(d, ['i3', 'i4'], 1); // shrink the running sprint to Chặng 1 only
   const L = layoutPlan(d, list, t, '2026-11-24');
@@ -102,7 +104,8 @@ test('editing the running sprint keeps finished and plain milestones and reuses 
   const ch = saveChanges(L, t, [active, planned], list, '2026-11-24', newId);
   assert.deepEqual(ch.active, { title: active.title, added: 0, removed: 2, closed: false, datesChanged: false });
   const a = ch.save.find((s) => s.id === 's1')!;
-  assert.deepEqual(a.milestones.map((m) => m.id), ['m1', 'mx', 'm2']);
+  assert.deepEqual(a.milestones.map((m) => m.id), ['m1', 'm2', 'mx']);
+  assert.equal(a.milestones[0].done, true, 'the finished lesson is still on the sprint');
   assert.equal(a.title, 'Chặng 1: Biết mình');
   assert.equal(a.status, 'active');
   const p = ch.save.find((s) => s.id === 's2')!;
@@ -163,3 +166,102 @@ test('drag and drop: one item or a selected group, before an anchor, across spri
   assert.deepEqual(d[2].itemIds, ['i3']);
   assert.equal(dropItems(d, [], 0, null), d);
 });
+
+test('completed lessons stay in their sprints and a re-save does not drop them', () => {
+  const list = phased().map((i, k) => (k < 6 ? { ...i, done: true, doneOn: '2026-10-10' } : i));
+  const s1 = sprint({
+    id: 's1', status: 'planned', title: 'Chặng 1: Biết mình', start: '2026-10-01', end: '2026-10-14',
+    milestones: [
+      { id: 'a', text: 'Bài 1', done: true, doneOn: '2026-10-10', itemId: 'i1' },
+      { id: 'b', text: 'Bài 2', done: true, doneOn: '2026-10-10', itemId: 'i2' },
+    ],
+  });
+  const s2 = sprint({
+    id: 's2', status: 'planned', title: 'Chặng 2: Thuế', start: '2026-10-15', end: '2026-10-28',
+    milestones: [
+      { id: 'c', text: 'Bài 3', done: true, doneOn: '2026-10-16', itemId: 'i3' },
+      { id: 'd', text: 'Bài 4', done: true, doneOn: '2026-10-16', itemId: 'i4' },
+      { id: 'e', text: 'Bài 5', done: true, doneOn: '2026-10-16', itemId: 'i5' },
+      { id: 'f', text: 'Bài 6', done: true, doneOn: '2026-10-16', itemId: 'i6' },
+    ],
+  });
+  const s3 = sprint({
+    id: 's3', status: 'planned', title: 'Chặng 3: Tín dụng', start: '2026-10-29', end: '2026-11-11',
+    milestones: [
+      { id: 'g', text: 'Bài 7', done: false, itemId: 'i7' },
+      { id: 'h', text: 'Bài 8', done: false, itemId: 'i8' },
+      { id: 'i', text: 'Bài 9', done: false, itemId: 'i9' },
+      { id: 'j', text: 'Bài 10', done: false, itemId: 'i10' },
+    ],
+  });
+  const t = track();
+  const d = draftsFromSprints([s3, s1, s2], list, 't1');
+  assert.deepEqual(d.map((x) => x.sprintId), ['s1', 's2', 's3'], 'sprints stay in start-date order');
+  assert.deepEqual(d[0].itemIds, ['i1', 'i2']);
+  assert.deepEqual(d[1].itemIds, ['i3', 'i4', 'i5', 'i6']);
+  assert.deepEqual(d[2].itemIds, ['i7', 'i8', 'i9', 'i10']);
+  assert.equal(d[0].start, '2026-10-01', 'stored dates are kept, not invented');
+  const L = layoutPlan(d, list, t, '2026-11-24');
+  assert.deepEqual(L.sprints.map((s) => s.title), ['Chặng 1: Biết mình', 'Chặng 2: Thuế', 'Chặng 3: Tín dụng']);
+  assert.equal(L.sprints[0].start, '2026-10-01');
+  assert.equal(L.sprints[0].end, '2026-10-14');
+  assert.equal(L.sprints[0].items.length, 2);
+  assert.ok(L.sprints[0].items.every((i) => i.done));
+  assert.equal(L.sprints[0].sessions, 0, 'finished work does not count toward remaining load');
+  assert.deepEqual(unplacedIds(d, list), [], 'done items are not offered as unassigned');
+  const ch = saveChanges(L, t, [s1, s2, s3], list, '2026-11-24', newId);
+  assert.deepEqual(ch.save, [], 'loading and saving without edits writes nothing');
+  assert.deepEqual(ch.remove, []);
+});
+
+test('a formally closed sprint stays in the planner as history and is not rewritten', () => {
+  const list = items(3, (i) => (i < 2 ? { done: true, doneOn: '2026-10-08' } : {}));
+  const closed = sprint({
+    id: 'sd', status: 'done', closedOn: '2026-10-15', title: 'Sprint đã xong', start: '2026-10-01', end: '2026-10-14',
+    milestones: [
+      { id: 'm1', text: 'Bài 1', done: true, doneOn: '2026-10-08', itemId: 'i1' },
+      { id: 'm2', text: 'Bài 2', done: true, doneOn: '2026-10-08', itemId: 'i2' },
+    ],
+  });
+  const open = sprint({
+    id: 's2', status: 'planned', title: 'Kế tiếp', start: '2026-10-15', end: '2026-10-28',
+    milestones: [{ id: 'm3', text: 'Bài 3', done: false, itemId: 'i3' }],
+  });
+  const d = draftsFromSprints([open, closed], list, 't1');
+  assert.equal(d[0].sprintId, 'sd');
+  assert.equal(d[0].locked, true);
+  assert.deepEqual(d[0].itemIds, ['i1', 'i2']);
+  assert.equal(d[1].sprintId, 's2');
+  const t = track();
+  const L = layoutPlan(d, list, t, '2026-11-24');
+  const ch = saveChanges(L, t, [closed, open], list, '2026-11-24', newId);
+  assert.deepEqual(ch.save, []);
+  assert.deepEqual(ch.remove, []);
+  // Moving the open sprint's item and saving must not reset or duplicate the closed sprint.
+  const moved = moveItems(d, ['i3'], d.length);
+  const ch2 = saveChanges(layoutPlan(moved, list, t, '2026-11-24'), t, [closed, open], list, '2026-11-24', newId);
+  assert.ok(!ch2.save.some((s) => s.id === 'sd'));
+  assert.ok(!ch2.save.some((s) => s.status === 'done' && s.id !== 'sd'));
+  assert.deepEqual(ch2.remove, []);
+  const created = ch2.save.find((s) => s.id !== 's2')!;
+  assert.ok(created);
+  assert.deepEqual(created.milestones.map((m) => m.itemId), ['i3']);
+});
+
+test('saveChanges never strips a done lesson even if the draft omitted it', () => {
+  const list = items(2, (i) => (i === 0 ? { done: true, doneOn: '2026-10-08' } : {}));
+  const s1 = sprint({
+    milestones: [
+      { id: 'm1', text: 'Bài 1', done: true, doneOn: '2026-10-08', itemId: 'i1' },
+      { id: 'm2', text: 'Bài 2', done: false, itemId: 'i2' },
+    ],
+  });
+  const t = track();
+  const d = withKeys([{ sprintId: 's1', weeks: 2, itemIds: ['i2'], start: '2026-11-24', days: 14 }]);
+  const ch = saveChanges(layoutPlan(d, list, t, '2026-11-24'), t, [s1], list, '2026-11-24', newId);
+  const saved = ch.save.find((s) => s.id === 's1')!;
+  assert.ok(saved.milestones.some((m) => m.itemId === 'i1' && m.done && m.id === 'm1'));
+  assert.ok(saved.milestones.some((m) => m.itemId === 'i2' && m.id === 'm2'));
+  assert.equal(saved.status, 'active');
+});
+

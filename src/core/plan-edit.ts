@@ -4,9 +4,14 @@
 import { diffDays } from './dates.js';
 import { costPrefs, itemSessions } from './roadmap.js';
 import { autoDeliverable, autoTitle, EDIT_MAX_WEEKS, EDIT_MIN_WEEKS, weeklyCapacity, type DraftSprint, type PlanLayout } from './plan.js';
-import type { Day, Milestone, RoadmapItem, Sprint, Track } from './types.js';
+import type { Day, Milestone, RoadmapItem, Sprint, SprintStatus, Track } from './types.js';
 
-export type EditDraft = DraftSprint & { key: string };
+export type EditDraft = DraftSprint & { key: string; status?: SprintStatus; locked?: boolean };
+
+/** Closed sprints are history: shown in the planner, not rewritten when the plan is saved. */
+export const isClosed = (s: { status?: SprintStatus; locked?: boolean }): boolean =>
+  !!s.locked || s.status === 'done' || s.status === 'dropped';
+
 
 let seq = 0;
 export const draftKey = (): string => `d${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -38,10 +43,10 @@ export function proposeByPhase(items: RoadmapItem[], track: Track): DraftSprint[
   return out.map((g) => ({ itemIds: g.itemIds, weeks: Math.max(EDIT_MIN_WEEKS, Math.min(EDIT_MAX_WEEKS, Math.ceil(g.sessions / perWeek - 1e-9))) }));
 }
 
-/** Items of `pool` that are in no draft, in pool order. */
+/** Items of `pool` that are in no draft, in pool order. Finished lessons are never offered as unassigned. */
 export function unplacedIds(drafts: DraftSprint[], pool: RoadmapItem[]): string[] {
   const used = new Set(drafts.flatMap((d) => d.itemIds));
-  return pool.filter((i) => !used.has(i.id)).map((i) => i.id);
+  return pool.filter((i) => !i.done && !used.has(i.id)).map((i) => i.id);
 }
 
 /**
@@ -119,35 +124,39 @@ export function renameSprint(drafts: EditDraft[], i: number, title: string): Edi
 
 /** Sets an explicit first day for draft i (empty string clears it so the sprint follows the previous one). */
 export function setStart(drafts: EditDraft[], i: number, start: Day | ''): EditDraft[] {
+  if (isClosed(drafts[i] ?? {})) return drafts;
   return drafts.map((d, k) => (k === i ? { ...d, start: start || undefined } : d));
 }
 
-/** Drops every explicit start except the first sprint's, so sprints follow each other from the plan start. */
+/** Drops every explicit start except the first sprint's, so sprints follow each other from the plan start. Closed sprints keep their dates. */
 export function chainDates(drafts: EditDraft[], keepFirst: boolean): EditDraft[] {
-  return drafts.map((d, k) => (k === 0 && keepFirst ? d : { ...d, start: undefined }));
+  return drafts.map((d, k) => (isClosed(d) || (k === 0 && keepFirst) ? d : { ...d, start: undefined }));
 }
 
 // ---------------------------------------------------------------- Existing sprints <-> drafts
 
 const isOpen = (s: Sprint) => s.status === 'active' || s.status === 'planned';
 
+const statusRank = (s: Sprint): number => (s.status === 'active' ? 0 : s.status === 'planned' ? 1 : 2);
+
 /**
- * The open sprints of a track (the active one first, then planned by start) as drafts that keep their exact
- * dates. Only unfinished linked items are editable; finished ones and plain milestones stay on the sprint.
- * A title that equals the automatic title of its items is treated as automatic, so it follows the new items.
+ * Every sprint of a track (open ones, then closed history) as drafts that keep their exact dates and every
+ * linked lesson, including finished ones. Closed sprints are marked `locked` so a later save will not rewrite
+ * them. A title that equals the automatic title of its items is treated as automatic, so it follows the items.
  */
 export function draftsFromSprints(sprints: Sprint[], items: RoadmapItem[], trackId: string): EditDraft[] {
   const byId = new Map(items.map((i) => [i.id, i]));
-  const open = sprints.filter((s) => s.trackId === trackId && isOpen(s))
-    .sort((a, b) => (a.status === b.status ? (a.start < b.start ? -1 : a.start > b.start ? 1 : 0) : a.status === 'active' ? -1 : 1));
+  const own = sprints.filter((s) => s.trackId === trackId)
+    .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : statusRank(a) - statusRank(b)));
   const seen = new Set<string>();
-  return open.map((s, k) => {
-    const ids = s.milestones.map((m) => m.itemId).filter((x): x is string => !!x && !!byId.get(x) && !byId.get(x)!.done && !seen.has(x));
+  return own.map((s, k) => {
+    const ids = s.milestones.map((m) => m.itemId).filter((x): x is string => !!x && !!byId.get(x) && !seen.has(x));
     ids.forEach((x) => seen.add(x));
-    const linked = s.milestones.map((m) => (m.itemId ? byId.get(m.itemId) : undefined)).filter((x): x is RoadmapItem => !!x);
+    const linked = ids.map((id) => byId.get(id)!);
     const days = diffDays(s.end, s.start) + 1;
     const auto = s.title === autoTitle(linked, k + 1);
-    return { key: s.id, sprintId: s.id, itemIds: ids, title: auto ? undefined : s.title, start: s.start, days, weeks: Math.max(1, Math.round(days / 7)) };
+    const locked = isClosed(s);
+    return { key: s.id, sprintId: s.id, itemIds: ids, title: auto ? undefined : s.title, start: s.start, days, weeks: Math.max(1, Math.round(days / 7)), status: s.status, locked };
   });
 }
 
@@ -159,8 +168,9 @@ export interface SaveChanges {
 
 /**
  * Turns the edited plan into sprint records.
- * - A draft with `sprintId` updates that sprint: plain milestones and finished linked milestones are kept, the
- *   unfinished linked ones become exactly the draft's items (an existing milestone is reused, so its id stays).
+ * - A draft with `sprintId` updates that open sprint: items follow the draft (including finished lessons);
+ *   plain milestones and finished linked milestones missing from the draft are kept. A milestone id is reused.
+ *   Closed (done/dropped) sprints in the layout are left untouched; they are never recreated or reset to planned.
  * - A new draft creates a sprint. When no sprint is running and no planned sprint is kept, the first sprint of the
  *   plan becomes active (same as creating a plan for the first time).
  * - An open sprint missing from the drafts is deleted when nothing in it was finished; otherwise it is closed
@@ -169,6 +179,7 @@ export interface SaveChanges {
 export function saveChanges(layout: PlanLayout, track: Track, sprints: Sprint[], items: RoadmapItem[], today: Day, newId: () => string): SaveChanges {
   const byItem = new Map(items.map((i) => [i.id, i]));
   const own = sprints.filter((s) => s.trackId === track.id && isOpen(s));
+  const closedIds = new Set(sprints.filter((s) => s.trackId === track.id && !isOpen(s)).map((s) => s.id));
   const byId = new Map(own.map((s) => [s.id, s]));
   const keptIds = new Set(layout.sprints.map((s) => s.sprintId).filter((x): x is string => !!x && byId.has(x)));
   const save: Sprint[] = [];
@@ -187,24 +198,34 @@ export function saveChanges(layout: PlanLayout, track: Track, sprints: Sprint[],
   const plannedKept = own.some((s) => s.status === 'planned' && keptIds.has(s.id));
   let needActive = !activeKept && !plannedKept;
   for (const L of layout.sprints) {
+    if (L.sprintId && closedIds.has(L.sprintId)) continue;
     const old = L.sprintId ? byId.get(L.sprintId) : undefined;
     const want = L.items.map((i) => i.id);
     if (old) {
-      const fixed = old.milestones.filter((m) => !m.itemId || !byItem.has(m.itemId) || byItem.get(m.itemId)!.done || m.done);
       const reuse = new Map(old.milestones.filter((m) => m.itemId).map((m) => [m.itemId!, m]));
-      const fixedItems = new Set(fixed.map((m) => m.itemId).filter(Boolean));
-      const linked: Milestone[] = want.filter((id) => !fixedItems.has(id)).map((id) => reuse.get(id) ?? { id: newId(), text: byItem.get(id)!.title, done: false, itemId: id });
-      const milestones = [...fixed, ...linked];
-      const oldOpen = old.milestones.filter((m) => m.itemId && !m.done).map((m) => m.itemId!);
-      const itemsChanged = oldOpen.join() !== want.join();
+      const used = new Set<string>();
+      const linked: Milestone[] = [];
+      for (const id of want) {
+        const item = byItem.get(id);
+        if (!item) continue;
+        const prev = reuse.get(id);
+        if (prev) { linked.push(prev); used.add(prev.id); }
+        else linked.push({ id: newId(), text: item.title, done: !!item.done, doneOn: item.doneOn, itemId: id });
+      }
+      // Finished linked milestones and plain ones missing from the draft stay on the sprint; they are never dropped.
+      const leftover = old.milestones.filter((m) => !used.has(m.id) && (!m.itemId || !byItem.has(m.itemId) || byItem.get(m.itemId)!.done || m.done));
+      const milestones = [...linked, ...leftover];
+      const oldOpen = old.milestones.filter((m) => m.itemId && !m.done && !byItem.get(m.itemId)?.done).map((m) => m.itemId!);
+      const wantOpen = want.filter((id) => !byItem.get(id)?.done);
+      const itemsChanged = oldOpen.join() !== wantOpen.join();
       const oldAutoDeliverable = old.deliverable === '' || /^Hoàn thành/.test(old.deliverable);
       const deliverable = itemsChanged && oldAutoDeliverable ? autoDeliverable(L.items) : old.deliverable;
       const title = L.autoTitle && !itemsChanged ? old.title : L.title;
       const next: Sprint = { ...old, title, deliverable, start: L.start, end: L.end, milestones };
       if (old.status === 'active') {
         const before = new Set(oldOpen);
-        const after = new Set(want);
-        active = { title: old.title, added: want.filter((x) => !before.has(x)).length, removed: oldOpen.filter((x) => !after.has(x)).length, closed: false, datesChanged: old.start !== L.start || old.end !== L.end };
+        const after = new Set(wantOpen);
+        active = { title: old.title, added: wantOpen.filter((x) => !before.has(x)).length, removed: oldOpen.filter((x) => !after.has(x)).length, closed: false, datesChanged: old.start !== L.start || old.end !== L.end };
       }
       if (JSON.stringify(next) !== JSON.stringify(old)) save.push(next);
     } else {
@@ -212,7 +233,7 @@ export function saveChanges(layout: PlanLayout, track: Track, sprints: Sprint[],
       if (status === 'active') needActive = false;
       save.push({
         id: newId(), trackId: track.id, title: L.title, deliverable: L.deliverable, start: L.start, end: L.end, status,
-        milestones: L.items.map((i) => ({ id: newId(), text: i.title, done: false, itemId: i.id })),
+        milestones: L.items.map((i) => ({ id: newId(), text: i.title, done: !!i.done, doneOn: i.doneOn, itemId: i.id })),
       });
     }
   }

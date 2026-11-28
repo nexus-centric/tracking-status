@@ -250,7 +250,13 @@ effort. Presets only produce a draft; the running sprint keeps its identity and 
 Free-form editing (`src/core/plan-edit.ts`, `#/t/:id/plan`). The planner opens on the open sprints of the track
 (running first, then planned, with their exact dates) or, when there are none, on an empty board with every
 lesson in "Chưa xếp" and three starts: an empty sprint, "Mỗi phần một sprint" (when there are phases) or "Chia 3
-tuần / sprint". Any sprint may hold any
+tuần / sprint".
+
+Finished lessons stay on their sprint in the planner (marked "Đã xong", not draggable, not offered in "Chưa xếp").
+A sprint whose every lesson is done, or whose stored status is `done`, is shown as "Hoàn thành" and collapsed by
+default, with its stored dates kept. Formally closed sprints (`done` / `dropped`) appear as read-only history and
+are not rewritten on save. Saving never drops a finished linked milestone, even if a draft omitted it. Membership
+is stored on the sprint milestone (`itemId`); the earlier planner only hid finished items, it did not delete them. Any sprint may hold any
 items in any order; nothing assumes phases. Operations, all pure and previewed before saving: multi-select items
 (single items, a phase group inside a sprint, or a whole sprint) and move them to any sprint, to a new sprint, or
 back to the "Chưa xếp vào sprint nào" pool; reorder items inside a sprint; reorder, split (at the first selected

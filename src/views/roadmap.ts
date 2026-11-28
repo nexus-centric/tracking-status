@@ -3,7 +3,7 @@ import { addDays, diffDays, fmtDay, today } from '../core/dates.js';
 import { fmtMinutes } from '../core/format.js';
 import { EDIT_MAX_WEEKS, itemsToPlan, layoutPlan, planChanges, planStart, proposePlan, setWeeks, type PlanLayout } from '../core/plan.js';
 import type Sortable from 'sortablejs';
-import { addSprint, chainDates, draftsFromSprints, dropItems, hasPhases, mergeWithNext, moveItems, moveSprint, moveWithin, proposeByPhase, removeSprint, renameSprint, saveChanges, setStart, splitSprint, unplacedIds, withKeys, type EditDraft } from '../core/plan-edit.js';
+import { addSprint, chainDates, draftsFromSprints, dropItems, hasPhases, isClosed, mergeWithNext, moveItems, moveSprint, moveWithin, proposeByPhase, removeSprint, renameSprint, saveChanges, setStart, splitSprint, unplacedIds, withKeys, type EditDraft } from '../core/plan-edit.js';
 import { costPrefs, itemSessions, moveItem, plannedItemIds, projectRoadmap, renumber, roadmapProgress, type CostPrefs, type Projection, type RoadmapProgress } from '../core/roadmap.js';
 import { parseRoadmapInput, type DraftItem, type ParseOutcome } from '../core/roadmap-parse.js';
 import { activeSprint, sprintProgress } from '../core/sprint.js';
@@ -594,16 +594,23 @@ export function planView(id: string): View {
       const remaining = () => itemsOf(t.id).filter((i) => !i.done);
       const statusOf = (sid?: string) => state.sprints.find((s) => s.id === sid)?.status;
       const activeDraft = () => drafts.find((x) => statusOf(x.sprintId) === 'active');
+      const itemDone = (id: string) => !!byId().get(id)?.done;
+      const allDone = (x: EditDraft) => !!x.itemIds.length && x.itemIds.every(itemDone);
       const applyPreset = (kind: string) => {
         const r = read();
         const keep = activeDraft();
+        const historic = drafts.filter((x) => x !== keep && (isClosed(x) || allDone(x)));
         const fresh = withKeys(kind === 'phase' && phased ? proposeByPhase(remaining(), r.track) : proposePlan(remaining(), r.track, Number(kind.slice(1)) || 3));
-        if (keep && fresh.length) fresh[0] = { ...fresh[0], key: keep.key, sprintId: keep.sprintId, start: keep.start, title: keep.title };
-        drafts = keep && !fresh.length ? [{ ...keep, itemIds: [] }] : fresh;
+        if (keep && !isClosed(keep) && fresh.length) {
+          const doneIds = keep.itemIds.filter(itemDone);
+          fresh[0] = { ...fresh[0], key: keep.key, sprintId: keep.sprintId, start: keep.start, title: keep.title, status: keep.status, itemIds: [...doneIds, ...fresh[0].itemIds.filter((id) => !doneIds.includes(id))] };
+        }
+        drafts = keep && isClosed(keep) && !fresh.length ? [...historic, keep] : [...historic, ...(keep && !fresh.length ? [{ ...keep, itemIds: keep.itemIds.filter(itemDone) }] : fresh)];
         if (!keep) f('start').value = f('start').value || d;
         sel.clear();
         open.clear();
-        if (drafts[0]) open.add(drafts[0].key);
+        const live = drafts.find((x) => !isClosed(x) && !allDone(x));
+        if (live) open.add(live.key);
         dirty = true;
         paint();
       };
@@ -612,7 +619,9 @@ export function planView(id: string): View {
         f('start').value = drafts[0]?.start ?? planStart(state.sprints, t.id, d, false);
         sel.clear();
         open.clear();
-        if (drafts[0]) open.add(drafts[0].key);
+        const live = drafts.find((x) => !isClosed(x) && !x.itemIds.every((id) => byId().get(id)?.done))
+          ?? drafts.find((x) => x.status === 'active');
+        if (live) open.add(live.key);
         dirty = false;
         paint();
       };
@@ -631,10 +640,18 @@ export function planView(id: string): View {
             gi++;
             const n = its.slice(k).findIndex((x) => (x.phase ?? '') !== ph);
             const group = its.slice(k, n < 0 ? undefined : k + n);
-            head = `<li class="pi-group" data-group="${list}:${gi}"><label><input type="checkbox" data-selgroup="${list}:${gi}" ${group.every((x) => sel.has(x.id)) ? 'checked' : ''}><span>${esc(ph || 'Chưa có phần')}</span></label><span class="count">${group.length}</span></li>`;
+            const movable = group.filter((x) => !x.done);
+            head = `<li class="pi-group" data-group="${list}:${gi}"><label>${movable.length ? `<input type="checkbox" data-selgroup="${list}:${gi}" ${movable.every((x) => sel.has(x.id)) ? 'checked' : ''}>` : ''}<span>${esc(ph || 'Chưa có phần')}</span></label><span class="count">${group.length}</span></li>`;
           }
           last = ph;
           const hide = list < 0 && ql && !it.title.toLowerCase().includes(ql) && !ph.toLowerCase().includes(ql);
+          if (it.done) {
+            return `${head}<li class="pi done" data-id="${it.id}" data-done="1" ${hide ? 'hidden' : ''}>
+            <span class="pi-handle" aria-hidden="true"></span>
+            <span class="pi-title">${esc(it.title)}</span>${it.estimate ? `<span class="est">${esc(estText(it.estimate))}</span>` : ''}
+            <span class="pill ok">Đã xong</span>
+          </li>`;
+          }
           return `${head}<li class="pi${sel.has(it.id) ? ' on' : ''}" data-id="${it.id}" ${hide ? 'hidden' : ''}>
             <span class="pi-handle" title="Kéo để di chuyển" aria-hidden="true">${GRIP}</span>
             <input type="checkbox" data-sel="${it.id}" ${sel.has(it.id) ? 'checked' : ''} aria-label="Chọn ${esc(it.title)}">
@@ -652,7 +669,7 @@ export function planView(id: string): View {
         const pool = unplacedIds(drafts, remaining());
         const ch = saveChanges(L, r.track, state.sprints, itemsOf(t.id), d, () => 'x');
         const n = sel.size;
-        const opts = L.sprints.map((s, i) => `<option value="${i}">S${i + 1} · ${esc(s.title.slice(0, 60))}</option>`).join('');
+        const opts = L.sprints.map((s, i) => isClosed(drafts[i]) ? '' : `<option value="${i}">S${i + 1} · ${esc(s.title.slice(0, 60))}</option>`).join('');
         out.innerHTML = `<div class="plan-board">
           <aside class="backlog card">
             <div class="col-head"><h2>Chưa xếp <span class="count">${pool.length}</span></h2>${pool.length ? `<button type="button" class="btn xs ghost" data-selall="-1">Chọn tất cả</button>` : ''}</div>
@@ -673,35 +690,40 @@ export function planView(id: string): View {
               <div class="row gap wrap center"><button type="button" class="btn small primary" data-add>+ Sprint trống</button>${phased ? '<button type="button" class="btn small" data-preset="phase">Mỗi phần một sprint</button>' : ''}<button type="button" class="btn small" data-preset="w3">Chia 3 tuần / sprint</button></div></div>`}
             <ol class="plan-sprints">${L.sprints.map((s, i) => {
           const dr = drafts[i];
-          const st = statusOf(dr.sprintId);
+          const st = dr.status ?? statusOf(dr.sprintId);
+          const doneN = s.items.filter((x) => x.done).length;
+          const complete = st === 'done' || (!!s.items.length && doneN === s.items.length);
+          const locked = isClosed(dr) || st === 'done' || st === 'dropped';
           const isOpen = open.has(dr.key);
           const days = dr.days && dr.days % 7 ? dr.days : 0;
           const pct = Math.min(100, (s.sessions / s.capacity) * 100);
-          return `<li class="ps card${s.over ? ' over' : ''}${st === 'active' ? ' live' : ''}${isOpen ? ' open' : ''}" data-key="${dr.key}">
+          const pill = st === 'dropped' ? ['drop', 'Đã bỏ'] : complete ? ['ok', 'Hoàn thành'] : st === 'active' ? ['live', 'Đang chạy'] : st === 'planned' ? ['plan', 'Đã lên lịch'] : ['new', 'Mới'];
+          const emptyPast = !s.items.length && s.end < d;
+          return `<li class="ps card${s.over ? ' over' : ''}${st === 'active' ? ' live' : ''}${complete ? ' complete' : ''}${locked ? ' locked' : ''}${isOpen ? ' open' : ''}" data-key="${dr.key}">
             <div class="ps-top">
               <button type="button" class="icon-btn ghost ps-toggle" data-toggle="${i}" aria-expanded="${isOpen}" aria-label="${isOpen ? 'Thu gọn' : 'Mở'} sprint ${i + 1}">${isOpen ? '▾' : '▸'}</button>
               <span class="ps-no">S${i + 1}</span>
-              <input class="ps-title" data-i="${i}" value="${esc(s.title)}" maxlength="200" aria-label="Tên sprint ${i + 1}">
-              <span class="pill ${st === 'active' ? 'live' : st === 'planned' ? 'plan' : 'new'}">${st === 'active' ? 'Đang chạy' : st === 'planned' ? 'Đã lên lịch' : 'Mới'}</span>
+              <input class="ps-title" data-i="${i}" value="${esc(s.title)}" maxlength="200" aria-label="Tên sprint ${i + 1}" ${locked ? 'readonly' : ''}>
+              <span class="pill ${pill[0]}">${pill[1]}</span>
             </div>
-            <div class="ps-meta"><span class="mono">${fmtDate(s.start)} – ${fmtDate(s.end)}</span><span>${s.items.length} bài</span><span class="${s.over ? 'warn-text' : ''}">${sessionsText(s.sessions)} / ${nf.format(s.capacity)} buổi</span>${s.autoTitle ? '<span class="muted">tên tự đặt</span>' : ''}${s.overlap ? '<span class="warn-text">trùng ngày sprint trước</span>' : ''}</div>
-            <div class="load" title="Khối lượng so với số buổi có thể học"><i style="width:${pct.toFixed(1)}%"></i></div>
-            ${isOpen ? `<div class="ps-dates">
+            <div class="ps-meta"><span class="mono">${fmtDate(s.start)} – ${fmtDate(s.end)}</span><span>${complete && s.items.length ? `${doneN}/${s.items.length} bài đã xong` : s.items.length ? `${doneN ? `${doneN}/` : ''}${s.items.length} bài` : '0 bài'}</span>${complete ? '' : `<span class="${s.over ? 'warn-text' : ''}">${sessionsText(s.sessions)} / ${nf.format(s.capacity)} buổi</span>`}${s.autoTitle ? '<span class="muted">tên tự đặt</span>' : ''}${s.overlap && !complete ? '<span class="warn-text">trùng ngày sprint trước</span>' : ''}</div>
+            ${complete ? '' : `<div class="load" title="Khối lượng còn lại so với số buổi có thể học"><i style="width:${pct.toFixed(1)}%"></i></div>`}
+            ${isOpen ? `${locked ? '' : `<div class="ps-dates">
                 <label class="small">Bắt đầu <input type="date" data-start="${i}" value="${s.start}"></label>
                 <label class="small">Độ dài <select data-weeks="${i}">${days ? `<option value="d" selected>${days} ngày</option>` : ''}${Array.from({ length: EDIT_MAX_WEEKS }, (_, k) => k + 1).map((w) => `<option value="${w}" ${!days && w === s.weeks ? 'selected' : ''}>${w} tuần</option>`).join('')}</select></label>
-                ${s.items.length ? `<button type="button" class="btn xs ghost" data-selall="${i}">Chọn tất cả</button>` : ''}
-              </div>
-              <ul class="pi-list" data-list="${i}">${rows(dr.itemIds, i)}</ul>
-              ${s.items.length ? '' : '<p class="drop-hint">Kéo bài vào đây</p>'}
+                ${s.items.some((x) => !x.done) ? `<button type="button" class="btn xs ghost" data-selall="${i}">Chọn tất cả</button>` : ''}
+              </div>`}
+              <ul class="pi-list${locked ? ' locked' : ''}" data-list="${i}">${rows(dr.itemIds, i)}</ul>
+              ${s.items.length ? '' : emptyPast ? '<p class="drop-hint muted">Sprint trống. Không có bài học nào được gán.</p>' : '<p class="drop-hint">Kéo bài vào đây</p>'}
               <div class="ps-acts">
-                ${n ? `<button type="button" class="btn small primary" data-here="${i}">Đưa ${n} bài đã chọn vào đây</button>` : ''}
+                ${locked ? '' : `${n ? `<button type="button" class="btn small primary" data-here="${i}">Đưa ${n} bài đã chọn vào đây</button>` : ''}
                 <button type="button" class="btn small ghost" data-sup="${i}" ${i === 0 ? 'disabled' : ''}>↑ Lên</button>
                 <button type="button" class="btn small ghost" data-sdown="${i}" ${i === L.sprints.length - 1 ? 'disabled' : ''}>↓ Xuống</button>
-                <button type="button" class="btn small ghost" data-split="${i}" ${s.items.length > 1 ? '' : 'disabled'} title="Tách tại bài đầu tiên đang chọn; không chọn bài nào thì chia đôi">Tách</button>
-                <button type="button" class="btn small ghost" data-merge="${i}" ${i < L.sprints.length - 1 ? '' : 'disabled'}>Gộp với sprint sau</button>
+                <button type="button" class="btn small ghost" data-split="${i}" ${s.items.filter((x) => !x.done).length > 1 ? '' : 'disabled'} title="Tách tại bài đầu tiên đang chọn; không chọn bài nào thì chia đôi">Tách</button>
+                <button type="button" class="btn small ghost" data-merge="${i}" ${i < L.sprints.length - 1 && !isClosed(drafts[i + 1]) ? '' : 'disabled'}>Gộp với sprint sau</button>
                 <span class="grow"></span>
-                <button type="button" class="btn small ghost danger" data-del="${i}">Xoá sprint</button>
-              </div>` : `<ul class="pi-list zone" data-list="${i}" aria-label="Thả bài vào sprint ${i + 1}"></ul>${n ? `<button type="button" class="btn xs primary here-mini" data-here="${i}">Đưa ${n} bài vào đây</button>` : ''}`}
+                <button type="button" class="btn small ghost danger" data-del="${i}">${emptyPast ? 'Xoá sprint trống' : 'Xoá sprint'}</button>`}
+              </div>` : `${locked || complete ? '' : `<ul class="pi-list zone" data-list="${i}" aria-label="Thả bài vào sprint ${i + 1}"></ul>${n ? `<button type="button" class="btn xs primary here-mini" data-here="${i}">Đưa ${n} bài vào đây</button>` : ''}`}`}
           </li>`;
         }).join('')}</ol>
             <div class="row gap wrap"><button type="button" class="btn small" data-add>+ Thêm sprint trống</button><button type="button" class="btn small ghost" data-chain ${L.sprints.length > 1 ? '' : 'disabled'}>Xếp ngày nối tiếp</button></div>
@@ -721,8 +743,10 @@ export function planView(id: string): View {
         for (const s of sortables) s.destroy();
         sortables = [];
         out.querySelectorAll<HTMLElement>('.pi-list').forEach((el) => {
+          const list = Number(el.dataset.list);
+          if (list >= 0 && isClosed(drafts[list] ?? {})) return;
           sortables.push(SortableLib!.create(el, {
-            group: 'plan', handle: '.pi-handle', draggable: '.pi', animation: 140, forceFallback: true, fallbackOnBody: true, fallbackTolerance: 3, delay: 120, delayOnTouchOnly: true,
+            group: 'plan', handle: '.pi-handle', draggable: '.pi:not(.done)', filter: '.pi.done, .pi-group', animation: 140, forceFallback: true, fallbackOnBody: true, fallbackTolerance: 3, delay: 120, delayOnTouchOnly: true,
             ghostClass: 'pi-ghost', chosenClass: 'pi-chosen', dragClass: 'pi-drag', emptyInsertThreshold: 24, scrollSensitivity: 90,
             // Badge set on choose, before the floating clone is made, so the clone shows "+N" too.
             onChoose: (e) => {
@@ -734,6 +758,7 @@ export function planView(id: string): View {
             onEnd: (e) => {
               document.body.classList.remove('is-dragging');
               const idd = (e.item as HTMLElement).dataset.id!;
+              if ((e.item as HTMLElement).dataset.done === '1' || byId().get(idd)?.done) { paint(); return; }
               const to = Number((e.to as HTMLElement).dataset.list);
               const from = Number((e.from as HTMLElement).dataset.list);
               if (from === to && e.oldIndex === e.newIndex) { paint(); return; }
@@ -750,7 +775,7 @@ export function planView(id: string): View {
       };
       const set = (next: EditDraft[]) => { if (next !== drafts) { drafts = next; dirty = true; } paint(); };
       const indexOf = (el: HTMLElement, attr: string) => Number(el.closest<HTMLElement>(`[data-${attr}]`)!.dataset[attr]);
-      const selected = () => [...drafts.flatMap((x) => x.itemIds), ...unplacedIds(drafts, remaining())].filter((x) => sel.has(x));
+      const selected = () => [...drafts.flatMap((x) => x.itemIds), ...unplacedIds(drafts, remaining())].filter((x) => sel.has(x) && !byId().get(x)?.done);
       const listOf = (itemId: string) => drafts.findIndex((x) => x.itemIds.includes(itemId));
       const groupIds = (list: number, gi: number): string[] => {
         const ids = list < 0 ? unplacedIds(drafts, remaining()) : drafts[list].itemIds;
@@ -778,7 +803,7 @@ export function planView(id: string): View {
         const r = read();
         const L = layoutPlan(drafts, itemsOf(t.id), r.track, r.start);
         menu.innerHTML = `<p class="menu-head">${many ? `Chuyển ${sel.size} bài đã chọn tới` : 'Chuyển tới'}</p>
-          ${L.sprints.map((s, i) => `<button type="button" role="menuitem" data-to="${i}" ${i === cur && !many ? 'aria-current="true"' : ''}><span class="ps-no">S${i + 1}</span><span class="menu-t">${esc(s.title)}</span><span class="count">${s.items.length}</span></button>`).join('')}
+          ${L.sprints.map((s, i) => isClosed(drafts[i]) ? '' : `<button type="button" role="menuitem" data-to="${i}" ${i === cur && !many ? 'aria-current="true"' : ''}><span class="ps-no">S${i + 1}</span><span class="menu-t">${esc(s.title)}</span><span class="count">${s.items.length}</span></button>`).join('')}
           <button type="button" role="menuitem" data-to="new"><span class="ps-no">+</span><span class="menu-t">Sprint mới ở cuối</span></button>
           ${cur >= 0 || many ? '<button type="button" role="menuitem" data-to="-1"><span class="ps-no">↩</span><span class="menu-t">Bỏ khỏi sprint (về Chưa xếp)</span></button>' : ''}`;
         menu.hidden = false;
@@ -817,7 +842,7 @@ export function planView(id: string): View {
       // ---- events
       form.addEventListener('change', (e) => {
         const el = e.target as HTMLInputElement;
-        if (el.name === 'start' && drafts[0]) { drafts = setStart(drafts, 0, el.value); dirty = true; }
+        if (el.name === 'start') { const i = drafts.findIndex((x) => !isClosed(x)); if (i >= 0) { drafts = setStart(drafts, i, el.value); dirty = true; } }
         paint();
       });
       form.addEventListener('click', (e) => {
@@ -834,7 +859,7 @@ export function planView(id: string): View {
       out.addEventListener('mousedown', (e) => { if ((e.target as HTMLElement).closest('.pi-handle')) e.preventDefault(); });
       out.addEventListener('input', (e) => {
         const el = e.target as HTMLInputElement;
-        if (el.classList.contains('ps-title')) { drafts = renameSprint(drafts, Number(el.dataset.i), el.value); dirty = true; out.querySelector<HTMLButtonElement>('[data-save]')!.disabled = false; out.querySelector<HTMLButtonElement>('[data-reload]')!.disabled = false; }
+        if (el.classList.contains('ps-title')) { const i = Number(el.dataset.i); if (isClosed(drafts[i])) return; drafts = renameSprint(drafts, i, el.value); dirty = true; out.querySelector<HTMLButtonElement>('[data-save]')!.disabled = false; out.querySelector<HTMLButtonElement>('[data-reload]')!.disabled = false; }
         if (el.classList.contains('backlog-q')) {
           q = el.value;
           const ql = q.toLowerCase();
@@ -850,19 +875,20 @@ export function planView(id: string): View {
         if (el.dataset.sel) { if (el.checked) sel.add(el.dataset.sel); else sel.delete(el.dataset.sel); paint(); return; }
         if (el.dataset.selgroup) {
           const [l, gi] = el.dataset.selgroup.split(':').map(Number);
-          for (const x of groupIds(l, gi)) if (el.checked) sel.add(x); else sel.delete(x);
+          for (const x of groupIds(l, gi)) { if (byId().get(x)?.done) continue; if (el.checked) sel.add(x); else sel.delete(x); }
           paint(); return;
         }
-        if (el.dataset.weeks !== undefined && el.value !== 'd') { set(setWeeks(drafts, Number(el.dataset.weeks), Number(el.value))); return; }
-        if (el.dataset.start !== undefined) { set(setStart(drafts, Number(el.dataset.start), el.value)); return; }
+        if (el.dataset.weeks !== undefined && el.value !== 'd') { const i = Number(el.dataset.weeks); if (isClosed(drafts[i])) return; set(setWeeks(drafts, i, Number(el.value))); return; }
+        if (el.dataset.start !== undefined) { const i = Number(el.dataset.start); if (isClosed(drafts[i])) return; set(setStart(drafts, i, el.value)); return; }
         if (el.classList.contains('ps-title')) paint();
       });
       out.addEventListener('keydown', (e) => {
         // Alt+↑/↓ on a lesson row reorders it inside its sprint (keyboard alternative to dragging).
         const row = (e.target as HTMLElement).closest<HTMLElement>('.pi');
         if (!row || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+        if (row.classList.contains('done') || byId().get(row.dataset.id!)?.done) return;
         const l = listOf(row.dataset.id!);
-        if (l < 0) return;
+        if (l < 0 || isClosed(drafts[l])) return;
         e.preventDefault();
         set(moveWithin(drafts, l, row.dataset.id!, e.key === 'ArrowUp' ? -1 : 1));
         out.querySelector<HTMLElement>(`.pi[data-id="${row.dataset.id}"] [data-menu]`)?.focus();
@@ -876,8 +902,8 @@ export function planView(id: string): View {
         if (has('closeall')) { open.clear(); paint(); return; }
         if (has('selall')) {
           const i = indexOf(el, 'selall');
-          const ids = i < 0 ? unplacedIds(drafts, remaining()) : drafts[i].itemIds;
-          const all = ids.every((x) => sel.has(x));
+          const ids = (i < 0 ? unplacedIds(drafts, remaining()) : drafts[i].itemIds).filter((x) => !byId().get(x)?.done);
+          const all = !!ids.length && ids.every((x) => sel.has(x));
           for (const x of ids) if (all) sel.delete(x); else sel.add(x);
           paint(); return;
         }
@@ -885,6 +911,7 @@ export function planView(id: string): View {
         if (has('move')) {
           const v = out.querySelector<HTMLSelectElement>('[data-target]')!.value;
           const to = v === 'new' ? drafts.length : Number(v);
+          if (to >= 0 && to < drafts.length && isClosed(drafts[to])) return;
           const ids = selected();
           sel.clear();
           const next = moveItems(drafts, ids, to);
@@ -893,11 +920,12 @@ export function planView(id: string): View {
           return;
         }
         if (has('unplace')) { const ids = selected(); sel.clear(); set(moveItems(drafts, ids, -1)); return; }
-        if (has('here')) { const i = indexOf(el, 'here'); const ids = selected(); sel.clear(); open.add(drafts[i].key); set(moveItems(drafts, ids, i)); return; }
-        if (has('sup')) { set(moveSprint(drafts, indexOf(el, 'sup'), -1)); return; }
-        if (has('sdown')) { set(moveSprint(drafts, indexOf(el, 'sdown'), 1)); return; }
+        if (has('here')) { const i = indexOf(el, 'here'); if (isClosed(drafts[i])) return; const ids = selected(); sel.clear(); open.add(drafts[i].key); set(moveItems(drafts, ids, i)); return; }
+        if (has('sup')) { const i = indexOf(el, 'sup'); if (isClosed(drafts[i]) || (i > 0 && isClosed(drafts[i - 1]))) return; set(moveSprint(drafts, i, -1)); return; }
+        if (has('sdown')) { const i = indexOf(el, 'sdown'); if (isClosed(drafts[i]) || (i < drafts.length - 1 && isClosed(drafts[i + 1]))) return; set(moveSprint(drafts, i, 1)); return; }
         if (has('split')) {
           const i = indexOf(el, 'split');
+          if (isClosed(drafts[i])) return;
           const ids = drafts[i].itemIds;
           const k = ids.findIndex((x) => sel.has(x));
           const next = splitSprint(drafts, i, k > 0 ? k : Math.ceil(ids.length / 2));
@@ -905,11 +933,14 @@ export function planView(id: string): View {
           set(next);
           return;
         }
-        if (has('merge')) { set(mergeWithNext(drafts, indexOf(el, 'merge'))); return; }
+        if (has('merge')) { const i = indexOf(el, 'merge'); if (isClosed(drafts[i]) || isClosed(drafts[i + 1] ?? {})) return; set(mergeWithNext(drafts, i)); return; }
         if (has('del')) {
           const i = indexOf(el, 'del');
+          if (isClosed(drafts[i])) return;
           const st = statusOf(drafts[i].sprintId);
-          if (drafts[i].itemIds.length && !confirm(`Xoá sprint này? ${drafts[i].itemIds.length} bài của nó sẽ về cột "Chưa xếp", không bị xoá khỏi lộ trình.${st === 'active' ? ' Đây là sprint đang chạy: khi lưu, sprint sẽ được khép lại (giữ các milestone đã xong trong lịch sử).' : ''}`)) return;
+          const openN = drafts[i].itemIds.filter((x) => !byId().get(x)?.done).length;
+          const doneN = drafts[i].itemIds.length - openN;
+          if (drafts[i].itemIds.length && !confirm(`Xoá sprint này?${openN ? ` ${openN} bài chưa xong sẽ về cột "Chưa xếp", không bị xoá khỏi lộ trình.` : ''}${doneN ? ` ${doneN} bài đã xong vẫn được giữ trong lịch sử sprint khi bạn lưu.` : ''}${st === 'active' ? ' Đây là sprint đang chạy: khi lưu, sprint sẽ được khép lại.' : ''}`)) return;
           set(removeSprint(drafts, i));
           return;
         }

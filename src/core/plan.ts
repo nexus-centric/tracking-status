@@ -122,7 +122,7 @@ export function layoutPlan(drafts: DraftSprint[], all: RoadmapItem[], track: Tra
     const days = d.days && d.days > 0 ? Math.round(d.days) : clampEditWeeks(d.weeks) * 7;
     const weeks = Math.max(1, Math.round(days / 7));
     const items = d.itemIds.map((id) => byId.get(id)).filter((x): x is RoadmapItem => !!x);
-    const sessions = items.reduce((a, i) => a + itemSessions(i, p), 0);
+    const sessions = items.filter((i) => !i.done).reduce((a, i) => a + itemSessions(i, p), 0);
     const capacity = Math.max(1, Math.round((days / 7) * perWeek * 10) / 10);
     const first = d.start ?? day;
     const end = addDays(first, days - 1);

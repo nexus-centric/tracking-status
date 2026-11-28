@@ -1228,3 +1228,15 @@ body.is-dragging .plan-foot { visibility: hidden; }
 .topic-import-actions li.tip-card { display: block; margin: 0; }
 .topic-import-actions .tip-lessons li { display: list-item; margin: 0; }
 .topic-import-actions .tip-card > p { margin: .35rem 0 0; }
+
+/* Completed lessons and historic sprints in the planner */
+.pi.done { opacity: .78; cursor: default; background: transparent; }
+.pi.done .pi-title { text-decoration: line-through; color: var(--muted); }
+.pi.done .pi-handle { visibility: hidden; pointer-events: none; }
+.pi.done .pill.ok { flex: 0 0 auto; }
+.pill.ok { background: color-mix(in srgb, var(--ok) 16%, #fff); color: var(--ok-ink, #166534); }
+.pill.drop { background: var(--soft); color: var(--muted); }
+.ps.complete { border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.ps.complete .load { display: none; }
+.ps.locked .ps-title { background: transparent; cursor: default; }
+.done-sum { margin: .35rem .15rem 0; }
